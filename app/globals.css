@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+.container {
+  display: grid;
+  grid-template-columns: 12% 12% 12% 12% 12% 12% 12%;
+  grid-template-rows: 50% 50% 50% 50%;
+  row-gap: 30px;
+  background-color: gainsboro;
+  margin: auto;
+  padding: 10px;
+  justify-content: center;
+  overflow: scroll;
+  height:700px;
+}
+.container div {
+  
+  font-size: 30px;
+  padding: 10px;
+  background-color: #f1f1f1;
+  border: 1px solid black;
+  text-align: right;
+}
+
+.daycontainer {
+  display: grid;
+  grid-template-columns: 10% 10% 10% 10% 10% 10% 10%;
+  background-color: slategrey;
+  margin: auto;
+  padding: 10px;
+  justify-content: center;
+}
+
+.container h1{
+  font-size: 30px;
+  font-weight: 400;
+  text-align: center;
+}
+
+.topbar {
+  display: grid;
+  grid-template-columns: 10% 20% 70%;
+  background-color: beige;
+  margin:auto;
+  padding: 10px;
+}
+
+.topbutton {
+  width: 100px;
+  height: 100px;
+  border-radius: 20px;
+  font-size: 50;
+  font-weight: 900;
+}
+
+.topinput {
+  background-color: antiquewhite;
+  border: 1px solid black;
+  padding: 5px;
+  border-radius: 15px;
+  width: 90%;
+  height: 90%;
+}
+
+.addbutton {
+  width: 40px;
+  height: 40px;
+  border-radius:10px;
+  text-align: center;
+}
+
+button {
+  background-color: aquamarine;
+  border: 1px solid black;
+}
+
+h1 {
+  font-size: 30px;
+  font-weight: 800;
+  margin: auto;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
