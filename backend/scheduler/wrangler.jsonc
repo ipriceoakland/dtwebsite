@@ -1,0 +1,15 @@
+{
+  "name": "deltatime-scheduler",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-03",
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+  "d1_databases": [
+    {
+      "binding": "deltatime_dev",
+      "database_name": "deltatime-dev",
+      "database_id": "9e31af0f-0f05-4a06-98df-5f6c647ef05b"
+    }
+  ]
+}
