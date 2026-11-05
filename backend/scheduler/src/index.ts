@@ -19,24 +19,39 @@ export default {
 
 		let processed = 0;
 		for (const { id } of due.results) {
-			const [attempt] = await db.batch([
-				db.prepare(
-					`INSERT INTO delivery_attempts
-						(reminder_id, attempt_no, status, attempted_at)
-					 SELECT id, attempts + 1, 'sent', ?
-					 FROM reminders
-					 WHERE id = ? AND status = 'pending' AND remind_at <= ?`,
-				).bind(now, id, now),
-				db.prepare(
-					`UPDATE reminders
-					 SET status = 'sent', attempts = attempts + 1,
-					     sent_at = ?, updated_at = ?, locked_until = NULL
-					 WHERE id = ? AND status = 'pending' AND remind_at <= ?`,
-				).bind(now, now, id, now),
-			]);
+	const claim = await db
+		.prepare(
+			`UPDATE reminders
+			 SET status = 'sending',
+			     attempts = attempts + 1,
+			     updated_at = ?,
+			     locked_until = ?
+			 WHERE id = ? AND status = 'pending' AND remind_at <= ?
+			 RETURNING attempts`,
+		)
+		.bind(now, now + 300, id, now)
+		.first<{ attempts: number }>();
 
-			processed += attempt.meta.changes;
-		}
+	if (!claim) continue;
+
+	const [attempt] = await db.batch([
+		db.prepare(
+			`INSERT INTO delivery_attempts
+				(reminder_id, attempt_no, status, attempted_at)
+			 SELECT id, attempts, 'sent', ?
+			 FROM reminders
+			 WHERE id = ? AND status = 'sending' AND attempts = ?`,
+		).bind(now, id, claim.attempts),
+		db.prepare(
+			`UPDATE reminders
+			 SET status = 'sent', sent_at = ?, updated_at = ?,
+			     locked_until = NULL
+			 WHERE id = ? AND status = 'sending' AND attempts = ?`,
+		).bind(now, now, id, claim.attempts),
+	]);
+
+	processed += attempt.meta.changes;
+}
 
 		console.log(`Deltatime scheduler: simulated ${processed} deliveries`);
 	},
