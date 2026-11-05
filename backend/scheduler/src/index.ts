@@ -1,0 +1,88 @@
+type SchedulerEnv = Env & {
+	SIMULATE_SMS?: string;
+	SIMULATE_SMS_OUTCOME?: string;
+};
+
+function simulateSms(outcome: string | undefined) {
+	switch (outcome) {
+		case undefined:
+		case "accepted":
+			return { reminderStatus: "sent", attemptStatus: "sent" };
+		case "rejected":
+			return { reminderStatus: "failed", attemptStatus: "failed" };
+		case "timeout":
+			return { reminderStatus: "sending", attemptStatus: "error" };
+		default:
+			throw new Error(`Unknown SIMULATE_SMS_OUTCOME: ${outcome}`);
+	}
+}
+export default {
+	async scheduled(controller, env): Promise<void> {
+		if (env.SIMULATE_SMS !== "true") return;
+        const result = simulateSms(env.SIMULATE_SMS_OUTCOME);
+
+		const now = Math.floor(controller.scheduledTime / 1000);
+		const db = env.deltatime_dev;
+        await db
+	        .prepare(
+                `UPDATE reminders
+                SET status = 'pending', locked_until = NULL, updated_at = ?
+                WHERE status = 'sending' AND locked_until <= ?`,
+            )
+            .bind(now, now)
+            .run();
+
+		const due = await db
+			.prepare(
+				`SELECT id FROM reminders
+				 WHERE status = 'pending' AND remind_at <= ?
+				 ORDER BY remind_at, id
+				 LIMIT 10`,
+			)
+			.bind(now)
+			.all<{ id: number }>();
+
+		let processed = 0;
+		for (const { id } of due.results) {
+	const claim = await db
+		.prepare(
+			`UPDATE reminders
+			 SET status = 'sending',
+			     attempts = attempts + 1,
+			     updated_at = ?,
+			     locked_until = ?
+			 WHERE id = ? AND status = 'pending' AND remind_at <= ?
+			 RETURNING attempts`,
+		)
+		.bind(now, now + 300, id, now)
+		.first<{ attempts: number }>();
+
+	if (!claim) continue;
+
+	const [attempt] = await db.batch([
+        db.prepare(
+            `INSERT INTO delivery_attempts
+                (reminder_id, attempt_no, status, attempted_at)
+            SELECT id, attempts, ?, ?
+            FROM reminders
+            WHERE id = ? AND status = 'sending' AND attempts = ?`,
+        ).bind(result.attemptStatus, now, id, claim.attempts),
+        db.prepare(
+            `UPDATE reminders
+            SET status = ?, sent_at = ?, updated_at = ?, locked_until = NULL
+            WHERE id = ? AND status = 'sending' AND attempts = ?`,
+        ).bind(
+            result.reminderStatus,
+            result.reminderStatus === "sent" ? now : null,
+            now,
+            id,
+            claim.attempts,
+        ),
+    ]);
+
+	processed += attempt.meta.changes;
+}
+
+		console.log(`Deltatime scheduler: processed ${processed} reminders (${result.attemptStatus})`);
+	},
+} satisfies ExportedHandler<SchedulerEnv>;
