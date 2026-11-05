@@ -48,7 +48,141 @@ export default {
 				);
 			}
 		}
-		
+		const reminderMatch = path.match(/^\/api\/reminders\/([0-9]+)$/);
+
+if (reminderMatch) {
+	const reminderId = Number(reminderMatch[1]);
+
+	if (!Number.isSafeInteger(reminderId) || reminderId < 1) {
+		return Response.json({ error: "Invalid reminder ID" }, { status: 400 });
+	}
+
+	if (request.method !== "PATCH" && request.method !== "DELETE") {
+		return Response.json(
+			{ error: "Method not allowed" },
+			{ status: 405, headers: { Allow: "PATCH, DELETE" } },
+		);
+	}
+
+	try {
+		const userId = await getSessionUserId(request, env.deltatime_dev);
+
+		if (userId === null) {
+			return Response.json(
+				{ error: "Sign in required" },
+				{ status: 401 },
+			);
+		}
+
+		if (request.method === "DELETE") {
+			const reminder = await env.deltatime_dev
+				.prepare(
+					`UPDATE reminders
+					 SET status = 'cancelled', updated_at = unixepoch()
+					 WHERE id = ? AND user_id = ? AND status = 'pending'
+					 RETURNING id, body, remind_at, recurrence, status`,
+				)
+				.bind(reminderId, userId)
+				.first();
+
+			if (!reminder) {
+				return Response.json(
+					{ error: "Pending reminder not found" },
+					{ status: 404 },
+				);
+			}
+
+			return Response.json({ reminder });
+		}
+
+		let input: unknown;
+		try {
+			input = await request.json();
+		} catch {
+			return Response.json({ error: "Invalid JSON" }, { status: 400 });
+		}
+
+		if (
+			typeof input !== "object" ||
+			input === null ||
+			Array.isArray(input)
+		) {
+			return Response.json(
+				{ error: "Expected a reminder object" },
+				{ status: 400 },
+			);
+		}
+
+		const data = input as Record<string, unknown>;
+		const hasBody = Object.hasOwn(data, "body");
+		const hasTime = Object.hasOwn(data, "remind_at");
+
+		if (!hasBody && !hasTime) {
+			return Response.json(
+				{ error: "Provide body or remind_at" },
+				{ status: 400 },
+			);
+		}
+
+		let body: string | null = null;
+		if (hasBody) {
+			if (typeof data.body !== "string") {
+				return Response.json(
+					{ error: "Description must be text" },
+					{ status: 400 },
+				);
+			}
+			body = data.body.trim();
+			if (body.length < 1 || body.length > 320) {
+				return Response.json(
+					{ error: "Description must be 1–320 characters" },
+					{ status: 400 },
+				);
+			}
+		}
+
+		let remindAt: number | null = null;
+		if (hasTime) {
+			if (
+				typeof data.remind_at !== "number" ||
+				!Number.isSafeInteger(data.remind_at) ||
+				data.remind_at <= Math.floor(Date.now() / 1000)
+			) {
+				return Response.json(
+					{ error: "remind_at must be a future UTC Unix timestamp in seconds" },
+					{ status: 400 },
+				);
+			}
+			remindAt = data.remind_at;
+		}
+
+		const reminder = await env.deltatime_dev
+			.prepare(
+				`UPDATE reminders
+				 SET body = COALESCE(?, body),
+				     remind_at = COALESCE(?, remind_at),
+				     updated_at = unixepoch()
+				 WHERE id = ? AND user_id = ? AND status = 'pending'
+				 RETURNING id, body, remind_at, recurrence, status`,
+			)
+			.bind(body, remindAt, reminderId, userId)
+			.first();
+
+		if (!reminder) {
+			return Response.json(
+				{ error: "Pending reminder not found" },
+				{ status: 404 },
+			);
+		}
+
+		return Response.json({ reminder });
+	} catch {
+		return Response.json(
+			{ error: "Unable to update reminder" },
+			{ status: 500 },
+		);
+	}
+}
 		if (path === "/api/reminders" && request.method === "POST") {
 	try {
 		const userId = await getSessionUserId(
