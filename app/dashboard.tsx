@@ -1,0 +1,403 @@
+"use client";
+
+import { useState, useSyncExternalStore } from "react";
+import { Modal } from "./modal";
+import { ReminderForm } from "./reminder-form";
+
+// Mirrors the reminders table; remindAt is a UTC timestamp in milliseconds.
+export type Reminder = {
+  id: number;
+  body: string;
+  remindAt: number;
+  status: "pending" | "sent" | "failed";
+};
+
+type View =
+  | { kind: "reminder"; id: number }
+  | { kind: "day"; day: number }
+  | { kind: "form"; day: number; id?: number }
+  | { kind: "account" };
+
+const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const statusLabels = { pending: "Pending", sent: "Sent", failed: "Failed" };
+
+// Same phrasing the SMS endpoint accepts.
+const reminderPattern = /^remind me in (\d{1,4}) minutes? to (.+)$/i;
+
+const timeFormat = new Intl.DateTimeFormat(undefined, {
+  hour: "numeric",
+  minute: "2-digit",
+});
+const longDateFormat = new Intl.DateTimeFormat(undefined, {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+});
+const monthDayFormat = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+});
+
+// Read the clock and timezone only in the browser, so the server render
+// and the first client render match.
+const subscribe = () => () => {};
+const getTodayStart = () => new Date().setHours(0, 0, 0, 0);
+const getTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+let nextId = 0;
+
+export function Dashboard() {
+  const todayStart = useSyncExternalStore(subscribe, getTodayStart, () => 0);
+  const timeZone = useSyncExternalStore(subscribe, getTimeZone, () => "");
+
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [view, setView] = useState<View | null>(null);
+  const [weeks, setWeeks] = useState(6);
+  const [prompt, setPrompt] = useState("");
+  const [promptError, setPromptError] = useState("");
+  const [toast, setToast] = useState("");
+
+  function showToast(message: string) {
+    setToast(message);
+    setTimeout(() => setToast((t) => (t === message ? "" : t)), 3000);
+  }
+
+  function saveReminder(body: string, remindAt: number, id?: number) {
+    if (id === undefined) {
+      const reminder: Reminder = {
+        id: nextId++,
+        body,
+        remindAt,
+        status: "pending",
+      };
+      setReminders((prev) => [...prev, reminder]);
+      showToast("Reminder added.");
+    } else {
+      setReminders((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, body, remindAt } : r)),
+      );
+      showToast("Reminder updated.");
+    }
+    setView(null);
+  }
+
+  function deleteReminder(id: number) {
+    setReminders((prev) => prev.filter((r) => r.id !== id));
+    setView(null);
+    showToast("Reminder deleted.");
+  }
+
+  function submitPrompt() {
+    const text = prompt.trim();
+    if (!text) return;
+
+    const match = reminderPattern.exec(text);
+    const minutes = match ? Number(match[1]) : 0;
+    if (!match || minutes < 1 || minutes > 1440) {
+      setPromptError(
+        "I couldn’t find a time in that. Try “Remind me in 30 minutes to study.”",
+      );
+      return;
+    }
+    saveReminder(match[2].trim(), Date.now() + minutes * 60_000);
+    setPrompt("");
+    setPromptError("");
+  }
+
+  // Group reminders by the local day they fall on, in time order.
+  const byDay = new Map<number, Reminder[]>();
+  for (const r of [...reminders].sort((a, b) => a.remindAt - b.remindAt)) {
+    const key = new Date(r.remindAt).setHours(0, 0, 0, 0);
+    byDay.set(key, [...(byDay.get(key) ?? []), r]);
+  }
+
+  // Start the grid on the Sunday of the current week.
+  const today = new Date(todayStart);
+  const days = Array.from(
+    { length: weeks * 7 },
+    (_, i) =>
+      new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate() - today.getDay() + i,
+      ),
+  );
+
+  const openReminder =
+    view?.kind === "reminder" || view?.kind === "form"
+      ? reminders.find((r) => r.id === view.id)
+      : undefined;
+
+  return (
+    <div>
+      <header className="topbar">
+        <div className="topbar-inner">
+          <button
+            type="button"
+            className="brand"
+            aria-label="Account"
+            onClick={() => setView({ kind: "account" })}
+          >
+            <span className="brand-mark" aria-hidden="true">
+              𝚫t
+            </span>
+            <span className="brand-name">Deltatime</span>
+          </button>
+        </div>
+      </header>
+
+      <main className="page">
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Schedule</h1>
+            <p className="page-subtitle">
+              {timeZone ? `Times shown in ${timeZone}` : " "}
+            </p>
+          </div>
+          <div className="prompt">
+            <textarea
+              className="input prompt-input"
+              rows={1}
+              placeholder="Remind me in 30 minutes to study"
+              aria-label="Add a reminder"
+              aria-invalid={!!promptError}
+              value={prompt}
+              onChange={(e) => {
+                setPrompt(e.target.value);
+                setPromptError("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  submitPrompt();
+                }
+              }}
+            />
+            {promptError && <p className="field-error">{promptError}</p>}
+          </div>
+        </div>
+
+        {todayStart > 0 && (
+          <>
+            <div className="calendar">
+              <div className="weekdays" aria-hidden="true">
+                {weekdays.map((day) => (
+                  <div key={day}>{day}</div>
+                ))}
+              </div>
+              <div className="days">
+                {days.map((day, i) => {
+                  const start = day.getTime();
+                  const items = byDay.get(start) ?? [];
+                  const isPast = start < todayStart;
+                  const label =
+                    i === 0 || day.getDate() === 1
+                      ? monthDayFormat.format(day)
+                      : day.getDate();
+
+                  return (
+                    <div
+                      key={start}
+                      className={[
+                        "day",
+                        start === todayStart && "day-today",
+                        isPast && "day-past",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
+                      <div className="day-head">
+                        <span className="day-date">{label}</span>
+                        {!isPast && (
+                          <button
+                            type="button"
+                            className="add-button"
+                            aria-label={`Add reminder on ${longDateFormat.format(day)}`}
+                            onClick={() => setView({ kind: "form", day: start })}
+                          >
+                            +
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Desktop: each reminder is its own button. */}
+                      <ul className="day-reminders">
+                        {items.map((r) => (
+                          <li key={r.id}>
+                            <button
+                              type="button"
+                              className="reminder-chip"
+                              onClick={() =>
+                                setView({ kind: "reminder", id: r.id })
+                              }
+                            >
+                              <span className="chip-time">
+                                {timeFormat.format(r.remindAt)}
+                              </span>{" "}
+                              {r.body}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+
+                      {/* Mobile: only the count, which opens the day. */}
+                      {items.length > 0 && (
+                        <button
+                          type="button"
+                          className="day-count"
+                          aria-label={`${items.length} ${items.length === 1 ? "reminder" : "reminders"} on ${longDateFormat.format(day)}`}
+                          onClick={() => setView({ kind: "day", day: start })}
+                        >
+                          {items.length}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="button more-weeks"
+              onClick={() => setWeeks((w) => w + 4)}
+            >
+              Show more weeks
+            </button>
+          </>
+        )}
+      </main>
+
+      <div className="scroll-hint" aria-hidden="true" />
+
+      {/* Window B (desktop): one reminder. */}
+      {view?.kind === "reminder" && openReminder && (
+        <Modal title="Reminder" onClose={() => setView(null)}>
+          <dl className="details">
+            <dt>Description</dt>
+            <dd>{openReminder.body}</dd>
+            <dt>Date and time</dt>
+            <dd>
+              {longDateFormat.format(openReminder.remindAt)} at{" "}
+              {timeFormat.format(openReminder.remindAt)}
+            </dd>
+            <dt>Status</dt>
+            <dd>
+              <StatusLabel status={openReminder.status} />
+            </dd>
+          </dl>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="button"
+              onClick={() =>
+                setView({
+                  kind: "form",
+                  day: new Date(openReminder.remindAt).setHours(0, 0, 0, 0),
+                  id: openReminder.id,
+                })
+              }
+            >
+              Edit
+            </button>
+            <span className="spacer" />
+            <button
+              type="button"
+              className="button button-primary"
+              onClick={() => setView(null)}
+            >
+              Back
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Screen B (mobile): every reminder on one day. */}
+      {view?.kind === "day" && (
+        <Modal
+          title={longDateFormat.format(view.day)}
+          onClose={() => setView(null)}
+        >
+          <ul className="day-list">
+            {(byDay.get(view.day) ?? []).map((r) => (
+              <li key={r.id} className="day-list-item">
+                <div>
+                  <p className="day-list-time">
+                    {timeFormat.format(r.remindAt)}{" "}
+                    <StatusLabel status={r.status} />
+                  </p>
+                  <p className="day-list-body">{r.body}</p>
+                </div>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() =>
+                    setView({ kind: "form", day: view.day, id: r.id })
+                  }
+                >
+                  Edit
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="modal-actions">
+            <span className="spacer" />
+            <button
+              type="button"
+              className="button button-primary"
+              onClick={() => setView(null)}
+            >
+              Back
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Window C: add or edit. */}
+      {view?.kind === "form" && (view.id === undefined || openReminder) && (
+        <ReminderForm
+          reminder={openReminder}
+          day={view.day}
+          onSave={(body, remindAt) =>
+            saveReminder(body, remindAt, openReminder?.id)
+          }
+          onDelete={() => openReminder && deleteReminder(openReminder.id)}
+          onCancel={() => setView(null)}
+        />
+      )}
+
+      {view?.kind === "account" && (
+        <Modal title="Account" onClose={() => setView(null)}>
+          <dl className="details">
+            <dt>Phone number</dt>
+            <dd>Not signed in</dd>
+            <dt>Timezone</dt>
+            <dd>{timeZone}</dd>
+          </dl>
+          <div className="modal-actions">
+            <span className="spacer" />
+            <button
+              type="button"
+              className="button button-primary"
+              onClick={() => setView(null)}
+            >
+              Back
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {toast && (
+        <div className="toast" role="status">
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatusLabel({ status }: { status: Reminder["status"] }) {
+  return (
+    <span className={`status status-${status}`}>{statusLabels[status]}</span>
+  );
+}

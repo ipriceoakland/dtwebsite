@@ -1,8 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fafafa;
+  --foreground: #18181b;
+  --surface: #ffffff;
+  --muted: #71717a;
+  --border: #e4e4e7;
+  --subtle: #f4f4f5;
+  --accent: #2563eb;
+  --accent-soft: #eff4ff;
+  --danger: #dc2626;
+  --success: #16a34a;
+  --warning: #b45309;
 }
 
 @theme inline {
@@ -14,92 +23,601 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #0a0a0b;
+    --foreground: #ededef;
+    --surface: #141416;
+    --muted: #a1a1aa;
+    --border: #27272a;
+    --subtle: #1c1c1f;
+    --accent: #60a5fa;
+    --accent-soft: #172036;
+    --danger: #f87171;
+    --success: #4ade80;
+    --warning: #fbbf24;
   }
-}
-
-.container {
-  display: grid;
-  grid-template-columns: 12% 12% 12% 12% 12% 12% 12%;
-  grid-template-rows: 50% 50% 50% 50%;
-  row-gap: 30px;
-  background-color: gainsboro;
-  margin: auto;
-  padding: 10px;
-  justify-content: center;
-  overflow: scroll;
-  height:700px;
-}
-.container div {
-  
-  font-size: 30px;
-  padding: 10px;
-  background-color: #f1f1f1;
-  border: 1px solid black;
-  text-align: right;
-}
-
-.daycontainer {
-  display: grid;
-  grid-template-columns: 10% 10% 10% 10% 10% 10% 10%;
-  background-color: slategrey;
-  margin: auto;
-  padding: 10px;
-  justify-content: center;
-}
-
-.container h1{
-  font-size: 30px;
-  font-weight: 400;
-  text-align: center;
-}
-
-.topbar {
-  display: grid;
-  grid-template-columns: 10% 20% 70%;
-  background-color: beige;
-  margin:auto;
-  padding: 10px;
-}
-
-.topbutton {
-  width: 100px;
-  height: 100px;
-  border-radius: 20px;
-  font-size: 50;
-  font-weight: 900;
-}
-
-.topinput {
-  background-color: antiquewhite;
-  border: 1px solid black;
-  padding: 5px;
-  border-radius: 15px;
-  width: 90%;
-  height: 90%;
-}
-
-.addbutton {
-  width: 40px;
-  height: 40px;
-  border-radius:10px;
-  text-align: center;
-}
-
-button {
-  background-color: aquamarine;
-  border: 1px solid black;
-}
-
-h1 {
-  font-size: 30px;
-  font-weight: 800;
-  margin: auto;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Top bar */
+
+.topbar {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  max-width: 1200px;
+  height: 56px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: -6px;
+  padding: 4px 8px 4px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.brand:hover {
+  background: var(--subtle);
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--foreground);
+  color: var(--background);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.brand-name {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Page */
+
+.page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+}
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.page-subtitle {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.prompt {
+  width: 100%;
+  max-width: 380px;
+}
+
+/* Form controls */
+
+.input {
+  width: 100%;
+  height: 40px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: 14px;
+  line-height: 20px;
+  transition: border-color 120ms, box-shadow 120ms;
+}
+
+.input::placeholder {
+  color: var(--muted);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.prompt-input {
+  resize: none;
+}
+
+.field-error {
+  margin-top: 6px;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.button {
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 120ms;
+}
+
+.button:hover {
+  background: var(--subtle);
+}
+
+.button-primary {
+  border-color: var(--foreground);
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.button-primary:hover {
+  background: var(--foreground);
+  opacity: 0.88;
+}
+
+.button-danger {
+  color: var(--danger);
+}
+
+.button-danger-solid {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #fff;
+}
+
+.button-danger-solid:hover {
+  background: var(--danger);
+  opacity: 0.88;
+}
+
+.button:focus-visible,
+.brand:focus-visible,
+.add-button:focus-visible,
+.reminder-chip:focus-visible,
+.day-count:focus-visible,
+.segmented button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Calendar */
+
+.calendar {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.weekdays {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border-bottom: 1px solid var(--border);
+  border-radius: 12px 12px 0 0;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.weekdays div {
+  padding: 10px 12px;
+}
+
+/* The 1px gap shows the background through as cell borders. */
+.days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border-radius: 0 0 12px 12px;
+  background: var(--border);
+}
+
+.day {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  min-height: 128px;
+  padding: 8px;
+  background: var(--surface);
+}
+
+.day-past {
+  background: var(--subtle);
+}
+
+.day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 26px;
+}
+
+.day-date {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 4px;
+  border-radius: 13px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.day-past .day-date {
+  color: var(--muted);
+}
+
+.day-today .day-date {
+  background: var(--accent);
+  color: #fff;
+}
+
+.add-button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 120ms, color 120ms;
+}
+
+.add-button:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.day-reminders {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  list-style: none;
+}
+
+.reminder-chip {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  padding: 4px 8px;
+  border-left: 2px solid var(--accent);
+  border-radius: 4px;
+  background: var(--accent-soft);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.reminder-chip:hover {
+  filter: brightness(0.97);
+}
+
+.chip-time {
+  color: var(--muted);
+}
+
+.day-count {
+  display: none;
+}
+
+.more-weeks {
+  display: block;
+  margin: 16px auto 0;
+}
+
+/* Windows */
+
+.modal {
+  width: calc(100% - 32px);
+  max-width: 440px;
+  margin: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.16);
+}
+
+.modal-small {
+  max-width: 360px;
+}
+
+.modal::backdrop {
+  background: rgb(0 0 0 / 0.4);
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-title {
+  margin-bottom: 16px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.modal-text {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.details {
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.details dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.details dd {
+  margin-bottom: 10px;
+  overflow-wrap: anywhere;
+}
+
+.status {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--subtle);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-pending {
+  color: var(--warning);
+}
+
+.status-sent {
+  color: var(--success);
+}
+
+.status-failed {
+  color: var(--danger);
+}
+
+.day-list {
+  list-style: none;
+}
+
+.day-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.day-list-time {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.day-list-body {
+  margin-top: 2px;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+/* Add / edit form */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.field label,
+.field-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.time-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.time-input {
+  width: 52px;
+  text-align: center;
+}
+
+.time-separator {
+  color: var(--muted);
+}
+
+.segmented {
+  display: flex;
+  margin-left: 8px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.segmented button {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.segmented button[aria-pressed="true"] {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  z-index: 10;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--foreground);
+  color: var(--background);
+  font-size: 14px;
+  transform: translateX(-50%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
+}
+
+.scroll-hint {
+  display: none;
+}
+
+/* Mobile: day boxes show a count, windows become full screens. */
+
+@media (max-width: 640px) {
+  .topbar-inner {
+    padding: 0 16px;
+  }
+
+  .page {
+    padding: 24px 16px 48px;
+  }
+
+  .prompt {
+    max-width: none;
+  }
+
+  .weekdays div {
+    padding: 8px 0;
+    font-size: 11px;
+    text-align: center;
+  }
+
+  .day {
+    align-items: center;
+    gap: 4px;
+    min-height: 76px;
+    padding: 6px 2px;
+  }
+
+  .day-head {
+    flex-direction: column;
+    height: auto;
+    gap: 2px;
+  }
+
+  .day-date {
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .add-button {
+    width: 24px;
+    height: 24px;
+    font-size: 16px;
+  }
+
+  .day-reminders {
+    display: none;
+  }
+
+  .day-count {
+    display: grid;
+    place-items: center;
+    min-width: 24px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .modal:not(.modal-small) {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .modal:not(.modal-small) .modal-body {
+    padding: 20px 16px;
+  }
+
+  /* Fade at the bottom of the screen hints that it scrolls. */
+  .scroll-hint {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: block;
+    height: 32px;
+    background: linear-gradient(transparent, var(--background));
+    pointer-events: none;
+  }
 }
