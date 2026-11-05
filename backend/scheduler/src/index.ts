@@ -6,6 +6,14 @@ export default {
 
 		const now = Math.floor(controller.scheduledTime / 1000);
 		const db = env.deltatime_dev;
+        await db
+	        .prepare(
+                `UPDATE reminders
+                SET status = 'pending', locked_until = NULL, updated_at = ?
+                WHERE status = 'sending' AND locked_until <= ?`,
+            )
+            .bind(now, now)
+            .run();
 
 		const due = await db
 			.prepare(
