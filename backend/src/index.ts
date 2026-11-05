@@ -26,7 +26,94 @@ async function getSessionUserId(
 export default {
 	async fetch(request, env): Promise<Response> {
 		const path = new URL(request.url).pathname;
+			if (path === "/sms/inbound" && request.method === "POST") {
+				if (env.LOCAL_SMS_TEST !== "true") {
+			return new Response("Not found", { status: 404 });
+		}
+		let form: FormData;
+		try {
+			form = await request.formData();
+		} catch {
+			return Response.json({ error: "Expected form data" }, { status: 400 });
+		}
 
+		const from = form.get("From");
+		const body = form.get("Body");
+		const messageSid = form.get("MessageSid");
+
+		if (
+			typeof from !== "string" || !from.trim() ||
+			typeof body !== "string" || !body.trim() ||
+			typeof messageSid !== "string" || !messageSid.trim()
+		) {
+			return Response.json(
+				{ error: "From, Body, and MessageSid are required" },
+				{ status: 400 },
+			);
+		}
+
+		const match = /^remind me in (\d{1,4}) minutes? to (.+)$/i.exec(body.trim());
+		const minutes = match ? Number(match[1]) : 0;
+
+		if (!match || minutes < 1 || minutes > 1440) {
+			return Response.json(
+				{ error: "Try: Remind me in 2 minutes to study" },
+				{ status: 400 },
+			);
+		}
+
+		const db = env.deltatime_dev;
+		const sender = from.trim();
+		const sid = messageSid.trim();
+		const task = match[2].trim();
+		const now = Math.floor(Date.now() / 1000);
+		const remindAt = now + minutes * 60;
+
+		if (task.length > 320) {
+			return Response.json({ error: "Task is too long" }, { status: 400 });
+		}
+
+		const user = await db
+			.prepare("SELECT id FROM users WHERE phone_e164 = ?")
+			.bind(sender)
+			.first<{ id: number }>();
+
+		if (!user) {
+			return Response.json({ error: "Unknown test sender" }, { status: 404 });
+		}
+
+		const [, inserted, saved] = await db.batch([
+			db.prepare(
+				`INSERT INTO inbound_messages
+					(message_sid, user_id, body, intent, parsed_json, reply_text, received_at)
+				VALUES (?, ?, ?, 'create', ?, 'Reminder saved', ?)
+				ON CONFLICT(message_sid) DO NOTHING`,
+			).bind(sid, user.id, body, JSON.stringify({ task, remind_at: remindAt }), now),
+
+			db.prepare(
+				`INSERT INTO reminders (user_id, source_message_sid, body, remind_at)
+				SELECT user_id, message_sid,
+						json_extract(parsed_json, '$.task'),
+						json_extract(parsed_json, '$.remind_at')
+				FROM inbound_messages
+				WHERE message_sid = ? AND user_id = ? AND intent = 'create'
+				ON CONFLICT(source_message_sid) DO NOTHING`,
+			).bind(sid, user.id),
+
+			db.prepare(
+				`SELECT id, body, remind_at, status FROM reminders
+				WHERE source_message_sid = ? AND user_id = ?`,
+			).bind(sid, user.id),
+		]);
+
+		const reminder = saved.results[0];
+		if (!reminder) {
+			return Response.json({ error: "Message ID already in use" }, { status: 409 });
+		}
+
+		const created = inserted.meta.changes === 1;
+		return Response.json({ reminder, duplicate: !created }, { status: created ? 201 : 200 });
+		}
 		if (path === "/") {
 			return new Response("Deltatime API is running");
 		}
@@ -299,4 +386,4 @@ if (reminderMatch) {
 
 		return new Response("Not found", { status: 404 });
 	},
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<Env & { LOCAL_SMS_TEST?: string }>;
