@@ -3,6 +3,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { Modal } from "./modal";
 import { ReminderForm } from "./reminder-form";
+import { parseReminder } from "./parse-reminder";
 
 // Mirrors the reminders table; remindAt is a UTC timestamp in milliseconds.
 export type Reminder = {
@@ -20,9 +21,6 @@ type View =
 
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const statusLabels = { pending: "Pending", sent: "Sent", failed: "Failed" };
-
-// Same phrasing the SMS endpoint accepts.
-const reminderPattern = /^remind me in (\d{1,4}) minutes? to (.+)$/i;
 
 const timeFormat = new Intl.DateTimeFormat(undefined, {
   hour: "numeric",
@@ -91,15 +89,16 @@ export function Dashboard() {
     const text = prompt.trim();
     if (!text) return;
 
-    const match = reminderPattern.exec(text);
-    const minutes = match ? Number(match[1]) : 0;
-    if (!match || minutes < 1 || minutes > 1440) {
-      setPromptError(
-        "I couldn’t find a time in that. Try “Remind me in 30 minutes to study.”",
-      );
+    const result = parseReminder(text);
+    if (!result.ok) {
+      setPromptError(result.error);
       return;
     }
-    saveReminder(match[2].trim(), Date.now() + minutes * 60_000);
+    saveReminder(result.body, result.remindAt);
+    // Say when it landed, so a misread time is easy to spot.
+    showToast(
+      `Reminder set for ${longDateFormat.format(result.remindAt)} at ${timeFormat.format(result.remindAt)}.`,
+    );
     setPrompt("");
     setPromptError("");
   }
@@ -158,7 +157,7 @@ export function Dashboard() {
             <textarea
               className="input prompt-input"
               rows={1}
-              placeholder="Remind me in 30 minutes to study"
+              placeholder="Remind me to call mom Monday at 5pm"
               aria-label="Add a reminder"
               aria-invalid={!!promptError}
               value={prompt}
