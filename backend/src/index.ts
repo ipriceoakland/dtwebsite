@@ -1,31 +1,11 @@
-async function getSessionUserId(
-	request: Request,
-	db: D1Database,
-): Promise<number | null> {
-	const cookie = request.headers.get("Cookie") ?? "";
-	const match = cookie.match(/(?:^|;\s*)dt_session=([A-Za-z0-9_-]{32,})/);
-
-	if (!match) return null;
-
-	const tokenBytes = new TextEncoder().encode(match[1]);
-	const hashBytes = await crypto.subtle.digest("SHA-256", tokenBytes);
-	const tokenHash = Array.from(new Uint8Array(hashBytes))
-		.map((byte) => byte.toString(16).padStart(2, "0"))
-		.join("");
-
-	const session = await db
-		.prepare(
-			"SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > ?",
-		)
-		.bind(tokenHash, Math.floor(Date.now() / 1000))
-		.first<{ user_id: number }>();
-
-	return session?.user_id ?? null;
-}
+import { getSessionUserId, handleAuthRequest, type AuthEnv } from "./auth";
 
 export default {
 	async fetch(request, env): Promise<Response> {
 		const path = new URL(request.url).pathname;
+		if (path.startsWith("/api/auth/")) {
+			return handleAuthRequest(request, env, path);
+		}
 			if (path === "/sms/inbound" && request.method === "POST") {
 				if (env.LOCAL_SMS_TEST !== "true") {
 			return new Response("Not found", { status: 404 });
@@ -386,4 +366,4 @@ if (reminderMatch) {
 
 		return new Response("Not found", { status: 404 });
 	},
-} satisfies ExportedHandler<Env & { LOCAL_SMS_TEST?: string }>;
+} satisfies ExportedHandler<AuthEnv & { LOCAL_SMS_TEST?: string }>;

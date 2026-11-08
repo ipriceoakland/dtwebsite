@@ -19,6 +19,8 @@ type View =
   | { kind: "form"; day: number; id?: number }
   | { kind: "account" };
 
+type Account = { user: { display_name: string | null } | null } | { error: true };
+
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const statusLabels = { pending: "Pending", sent: "Sent", failed: "Failed" };
 
@@ -41,12 +43,14 @@ const monthDayFormat = new Intl.DateTimeFormat(undefined, {
 const subscribe = () => () => {};
 const getTodayStart = () => new Date().setHours(0, 0, 0, 0);
 const getTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+const getSignInFailed = () => new URLSearchParams(window.location.search).get("signin") === "failed";
 
 let nextId = 0;
 
 export function Dashboard() {
   const todayStart = useSyncExternalStore(subscribe, getTodayStart, () => 0);
   const timeZone = useSyncExternalStore(subscribe, getTimeZone, () => "");
+  const signInFailed = useSyncExternalStore(subscribe, getSignInFailed, () => false);
 
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [view, setView] = useState<View | null>(null);
@@ -54,6 +58,19 @@ export function Dashboard() {
   const [prompt, setPrompt] = useState("");
   const [promptError, setPromptError] = useState("");
   const [toast, setToast] = useState("");
+  const [account, setAccount] = useState<Account | null>(null);
+
+  async function openAccount() {
+    setView({ kind: "account" });
+    setAccount(null);
+    try {
+      const response = await fetch("/api/auth/session", { cache: "no-store" });
+      if (!response.ok) throw new Error("Unable to load account");
+      setAccount(await response.json());
+    } catch {
+      setAccount({ error: true });
+    }
+  }
 
   function showToast(message: string) {
     setToast(message);
@@ -135,7 +152,7 @@ export function Dashboard() {
             type="button"
             className="brand"
             aria-label="Account"
-            onClick={() => setView({ kind: "account" })}
+            onClick={openAccount}
           >
             <span className="brand-mark" aria-hidden="true">
               𝚫t
@@ -146,6 +163,9 @@ export function Dashboard() {
       </header>
 
       <main className="page">
+        {signInFailed && (
+          <p className="field-error" role="alert">Google sign-in couldn’t be completed. Open Account to try again.</p>
+        )}
         <div className="page-header">
           <div>
             <h1 className="page-title">Schedule</h1>
@@ -368,18 +388,25 @@ export function Dashboard() {
       {view?.kind === "account" && (
         <Modal title="Account" onClose={() => setView(null)}>
           <dl className="details">
-            <dt>Phone number</dt>
-            <dd>Not signed in</dd>
+            <dt>Sign-in</dt>
+            <dd>
+              {account === null ? "Checking sign-in…" :
+                "error" in account ? "Couldn’t check sign-in. Close Account and try again." :
+                  account.user ? account.user.display_name ?? "Signed in" : "Not signed in"}
+            </dd>
             <dt>Timezone</dt>
             <dd>{timeZone}</dd>
           </dl>
           <div className="modal-actions">
             <span className="spacer" />
-            <button
-              type="button"
-              className="button button-primary"
-              onClick={() => setView(null)}
-            >
+            {account && "user" in account && (account.user ? (
+              <form method="post" action="/api/auth/signout">
+                <button type="submit" className="button">Sign out</button>
+              </form>
+            ) : (
+              <a href="/api/auth/google" className="button button-primary">Sign in with Google</a>
+            ))}
+            <button type="button" className="button" onClick={() => setView(null)}>
               Back
             </button>
           </div>
