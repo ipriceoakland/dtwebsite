@@ -31,9 +31,9 @@ const longDateFormat = new Intl.DateTimeFormat(undefined, {
   month: "long",
   day: "numeric",
 });
-const monthDayFormat = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
+const monthFormat = new Intl.DateTimeFormat(undefined, {
+  month: "long",
+  year: "numeric",
 });
 
 // Read the clock and timezone only in the browser, so the server render
@@ -42,15 +42,13 @@ const subscribe = () => () => {};
 const getTodayStart = () => new Date().setHours(0, 0, 0, 0);
 const getTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-let nextId = 0;
-
 export function Dashboard() {
   const todayStart = useSyncExternalStore(subscribe, getTodayStart, () => 0);
   const timeZone = useSyncExternalStore(subscribe, getTimeZone, () => "");
 
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [view, setView] = useState<View | null>(null);
-  const [weeks, setWeeks] = useState(6);
+  const [showYear, setShowYear] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [promptError, setPromptError] = useState("");
   const [toast, setToast] = useState("");
@@ -62,13 +60,15 @@ export function Dashboard() {
 
   function saveReminder(body: string, remindAt: number, id?: number) {
     if (id === undefined) {
-      const reminder: Reminder = {
-        id: nextId++,
-        body,
-        remindAt,
-        status: "pending",
-      };
-      setReminders((prev) => [...prev, reminder]);
+      setReminders((prev) => [
+        ...prev,
+        {
+          id: Math.max(0, ...prev.map((r) => r.id)) + 1,
+          body,
+          remindAt,
+          status: "pending",
+        },
+      ]);
       showToast("Reminder added.");
     } else {
       setReminders((prev) =>
@@ -110,17 +110,90 @@ export function Dashboard() {
     byDay.set(key, [...(byDay.get(key) ?? []), r]);
   }
 
-  // Start the grid on the Sunday of the current week.
+  // One grid per month, starting with the current one. Each grid is padded
+  // with empty cells so the 1st lands under its weekday and rows stay full.
   const today = new Date(todayStart);
-  const days = Array.from(
-    { length: weeks * 7 },
-    (_, i) =>
-      new Date(
-        today.getFullYear(),
-        today.getMonth(),
-        today.getDate() - today.getDay() + i,
+  // The current month, or a year ahead (through the same month next year).
+  const months = Array.from({ length: showYear ? 13 : 1 }, (_, k) => {
+    const first = new Date(today.getFullYear(), today.getMonth() + k, 1);
+    const daysInMonth = new Date(
+      first.getFullYear(),
+      first.getMonth() + 1,
+      0,
+    ).getDate();
+    const cells: (Date | null)[] = [
+      ...Array<null>(first.getDay()).fill(null),
+      ...Array.from(
+        { length: daysInMonth },
+        (_, d) => new Date(first.getFullYear(), first.getMonth(), d + 1),
       ),
-  );
+    ];
+    while (cells.length % 7) cells.push(null);
+    return { first, cells };
+  });
+
+  function renderDay(day: Date) {
+    const start = day.getTime();
+    const items = byDay.get(start) ?? [];
+    const isPast = start < todayStart;
+
+    return (
+      <div
+        key={start}
+        className={[
+          "day",
+          start === todayStart && "day-today",
+          isPast && "day-past",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        <div className="day-head">
+          <span className="day-date">{day.getDate()}</span>
+          {!isPast && (
+            <button
+              type="button"
+              className="add-button"
+              aria-label={`Add reminder on ${longDateFormat.format(day)}`}
+              onClick={() => setView({ kind: "form", day: start })}
+            >
+              +
+            </button>
+          )}
+        </div>
+
+        {/* Desktop: each reminder is its own button. */}
+        <ul className="day-reminders">
+          {items.map((r) => (
+            <li key={r.id}>
+              <button
+                type="button"
+                className="reminder-chip"
+                onClick={() => setView({ kind: "reminder", id: r.id })}
+              >
+                <span className="chip-time">
+                  {timeFormat.format(r.remindAt)}
+                </span>
+                <span className="chip-body">{r.body}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        {/* Mobile: only the count, which opens the day. */}
+        {items.length > 0 && (
+          <button
+            type="button"
+            className="day-count"
+            aria-label={`${items.length} ${items.length === 1 ? "reminder" : "reminders"} on ${longDateFormat.format(day)}`}
+            onClick={() => setView({ kind: "day", day: start })}
+          >
+            {items.length}
+          </button>
+        )}
+      </div>
+    );
+  }
 
   const openReminder =
     view?.kind === "reminder" || view?.kind === "form"
@@ -128,7 +201,7 @@ export function Dashboard() {
       : undefined;
 
   return (
-    <div>
+    <div className="app">
       <header className="topbar">
         <div className="topbar-inner">
           <button
@@ -147,16 +220,21 @@ export function Dashboard() {
 
       <main className="page">
         <div className="page-header">
-          <div>
-            <h1 className="page-title">Schedule</h1>
-            <p className="page-subtitle">
-              {timeZone ? `Times shown in ${timeZone}` : " "}
+          <h1 className="page-title">Schedule</h1>
+          <p className="page-subtitle">
+            {timeZone ? `Times shown in ${timeZone}` : " "}
+          </p>
+        </div>
+
+        <div className="layout">
+          <aside className="prompt-panel">
+            <h2 className="panel-title">Add a reminder</h2>
+            <p className="panel-hint">
+              Type it like a text message, for example “Remind me to call
+              mom Monday at 5pm.”
             </p>
-          </div>
-          <div className="prompt">
             <textarea
               className="input prompt-input"
-              rows={1}
               placeholder="Remind me to call mom Monday at 5pm"
               aria-label="Add a reminder"
               aria-invalid={!!promptError}
@@ -173,98 +251,53 @@ export function Dashboard() {
               }}
             />
             {promptError && <p className="field-error">{promptError}</p>}
-          </div>
-        </div>
+            <div className="panel-actions">
+              <button
+                type="button"
+                className="button button-primary"
+                onClick={submitPrompt}
+              >
+                Add reminder
+              </button>
+            </div>
+          </aside>
 
-        {todayStart > 0 && (
-          <>
-            <div className="calendar">
-              <div className="weekdays" aria-hidden="true">
-                {weekdays.map((day) => (
-                  <div key={day}>{day}</div>
-                ))}
-              </div>
-              <div className="days">
-                {days.map((day, i) => {
-                  const start = day.getTime();
-                  const items = byDay.get(start) ?? [];
-                  const isPast = start < todayStart;
-                  const label =
-                    i === 0 || day.getDate() === 1
-                      ? monthDayFormat.format(day)
-                      : day.getDate();
-
-                  return (
-                    <div
-                      key={start}
-                      className={[
-                        "day",
-                        start === todayStart && "day-today",
-                        isPast && "day-past",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                    >
-                      <div className="day-head">
-                        <span className="day-date">{label}</span>
-                        {!isPast && (
-                          <button
-                            type="button"
-                            className="add-button"
-                            aria-label={`Add reminder on ${longDateFormat.format(day)}`}
-                            onClick={() => setView({ kind: "form", day: start })}
-                          >
-                            +
-                          </button>
+          <section className="months" aria-label="Calendar">
+            {todayStart > 0 && (
+              <>
+                {months.map(({ first, cells }) => (
+                  <div key={first.getTime()} className="month">
+                    <h2 className="month-title">{monthFormat.format(first)}</h2>
+                    <div className="calendar">
+                      <div className="weekdays" aria-hidden="true">
+                        {weekdays.map((day) => (
+                          <div key={day}>{day}</div>
+                        ))}
+                      </div>
+                      <div className="days">
+                        {cells.map((day, i) =>
+                          day ? (
+                            renderDay(day)
+                          ) : (
+                            <div key={`empty-${i}`} className="day day-empty" />
+                          ),
                         )}
                       </div>
-
-                      {/* Desktop: each reminder is its own button. */}
-                      <ul className="day-reminders">
-                        {items.map((r) => (
-                          <li key={r.id}>
-                            <button
-                              type="button"
-                              className="reminder-chip"
-                              onClick={() =>
-                                setView({ kind: "reminder", id: r.id })
-                              }
-                            >
-                              <span className="chip-time">
-                                {timeFormat.format(r.remindAt)}
-                              </span>{" "}
-                              {r.body}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-
-                      {/* Mobile: only the count, which opens the day. */}
-                      {items.length > 0 && (
-                        <button
-                          type="button"
-                          className="day-count"
-                          aria-label={`${items.length} ${items.length === 1 ? "reminder" : "reminders"} on ${longDateFormat.format(day)}`}
-                          onClick={() => setView({ kind: "day", day: start })}
-                        >
-                          {items.length}
-                        </button>
-                      )}
                     </div>
-                  );
-                })}
-              </div>
-            </div>
+                  </div>
+                ))}
 
-            <button
-              type="button"
-              className="button more-weeks"
-              onClick={() => setWeeks((w) => w + 4)}
-            >
-              Show more weeks
-            </button>
-          </>
-        )}
+                <button
+                  type="button"
+                  className="button more-months"
+                  onClick={() => setShowYear((v) => !v)}
+                >
+                  {showYear ? "Show fewer months" : "Show more months"}
+                </button>
+              </>
+            )}
+          </section>
+        </div>
       </main>
 
       <div className="scroll-hint" aria-hidden="true" />

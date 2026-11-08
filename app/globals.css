@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light dark;
   --background: #fafafa;
   --foreground: #18181b;
   --surface: #ffffff;
@@ -93,19 +94,26 @@ body {
 
 /* Page */
 
+/* Desktop: the app fills the window and only the calendar column scrolls. */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
 .page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 40px 24px 64px;
+  padding: 24px 24px 0;
 }
 
 .page-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .page-title {
@@ -120,9 +128,81 @@ body {
   font-size: 14px;
 }
 
-.prompt {
+/* Calendar on the left half, reminder box on the right half. */
+.layout {
+  display: grid;
+  flex: 1;
+  grid-template-areas: "calendar prompt";
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 0;
+  gap: 24px;
+}
+
+.months {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  grid-area: calendar;
+  min-height: 0;
+  padding-bottom: 24px;
+  overflow-y: auto;
+}
+
+/* Each month fills at least the column, leaving room for the gap, the
+   months button and the bottom padding; six-week months grow past it. */
+.month {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-height: max(420px, calc(100% - 92px));
+}
+
+.month .calendar {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.month .days {
+  flex: 1;
+  grid-auto-rows: minmax(64px, 1fr);
+}
+
+/* Centered in the right half. */
+.prompt-panel {
+  grid-area: prompt;
+  align-self: center;
+  justify-self: center;
   width: 100%;
-  max-width: 380px;
+  max-width: 440px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.panel-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.panel-hint {
+  margin: 4px 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.month-title {
+  margin-bottom: 10px;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 /* Form controls */
@@ -155,6 +235,7 @@ body {
 }
 
 .prompt-input {
+  height: 112px;
   resize: none;
 }
 
@@ -259,9 +340,14 @@ body {
   flex-direction: column;
   gap: 6px;
   min-width: 0;
-  min-height: 128px;
+  min-height: 0;
+  overflow: hidden;
   padding: 8px;
   background: var(--surface);
+}
+
+.day-empty {
+  background: var(--background);
 }
 
 .day-past {
@@ -324,15 +410,13 @@ body {
   display: block;
   width: 100%;
   overflow: hidden;
-  padding: 4px 8px;
+  padding: 3px 6px;
   border-left: 2px solid var(--accent);
   border-radius: 4px;
   background: var(--accent-soft);
   font-size: 12px;
-  line-height: 18px;
+  line-height: 16px;
   text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -340,17 +424,26 @@ body {
   filter: brightness(0.97);
 }
 
+.chip-time,
+.chip-body {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chip-time {
   color: var(--muted);
+  font-size: 11px;
 }
 
 .day-count {
   display: none;
 }
 
-.more-weeks {
-  display: block;
-  margin: 16px auto 0;
+.more-months {
+  flex: none;
+  align-self: center;
 }
 
 /* Windows */
@@ -533,6 +626,45 @@ body {
   display: none;
 }
 
+/* Narrower screens: stack the reminder box above the calendar. */
+
+@media (max-width: 960px) {
+  .app {
+    height: auto;
+  }
+
+  .page {
+    padding-bottom: 48px;
+  }
+
+  .layout {
+    grid-template-areas: "prompt" "calendar";
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .prompt-panel {
+    max-width: none;
+  }
+
+  .months {
+    padding-bottom: 0;
+    overflow: visible;
+  }
+
+  .month {
+    height: auto;
+    min-height: 0;
+  }
+
+  .month .days {
+    grid-auto-rows: auto;
+  }
+
+  .day {
+    min-height: 96px;
+  }
+}
+
 /* Mobile: day boxes show a count, windows become full screens. */
 
 @media (max-width: 640px) {
@@ -544,8 +676,12 @@ body {
     padding: 24px 16px 48px;
   }
 
-  .prompt {
-    max-width: none;
+  .prompt-panel {
+    padding: 16px;
+  }
+
+  .prompt-input {
+    height: 80px;
   }
 
   .weekdays div {
