@@ -67,6 +67,8 @@ export function Dashboard() {
   const [view, setView] = useState<View | null>(null);
   const [weeks, setWeeks] = useState(6);
   const [prompt, setPrompt] = useState("");
+  const [mobileTab, setMobileTab] = useState<"home" | "calendar">("home");
+  const [lastSaved, setLastSaved] = useState<Reminder | null>(null);
   const [promptError, setPromptError] = useState("");
   const [formError, setFormError] = useState("");
   const [toast, setToast] = useState("");
@@ -170,6 +172,7 @@ export function Dashboard() {
           previous.map((reminder) => reminder.id === id ? saved : reminder));
         if (source === "prompt") {
           setPrompt("");
+          setLastSaved(saved);
           showToast(`Reminder saved for ${longDateFormat.format(saved.remindAt)} at ${timeFormat.format(saved.remindAt)}.`);
         } else {
           showToast(id === undefined ? "Reminder added." : "Reminder updated.");
@@ -224,6 +227,12 @@ export function Dashboard() {
       ? reminders.find((r) => r.id === view.id)
       : undefined;
 
+  const promptPreview = prompt.trim() ? parseReminder(prompt) : null;
+  const upcoming = [...reminders]
+    .filter((reminder) => reminder.status === "pending" && reminder.remindAt > Date.now())
+    .sort((a, b) => a.remindAt - b.remindAt)
+    .slice(0, 4);
+
   return (
     <div>
       <header className="topbar">
@@ -246,6 +255,75 @@ export function Dashboard() {
         {signInFailed && (
           <p className="field-error" role="alert">Google sign-in couldn’t be completed. Open Account to try again.</p>
         )}
+        {loadState !== "loading" && (
+          <section className="mobile-home" aria-label="Quick reminders" hidden={mobileTab !== "home"}>
+            <p className="mobile-eyebrow">YOUR SPACE, YOUR TIME</p>
+            <h1 className="mobile-title">What do you need<br />to remember?</h1>
+            <p className="mobile-intro">Write it the way you’d text it.</p>
+
+            <form className="mobile-composer" onSubmit={(event) => { event.preventDefault(); if (loadState === "ready") submitPrompt(); else void openAccount(); }}>
+              <label htmlFor="mobile-reminder" className="mobile-label">New reminder</label>
+              <textarea
+                id="mobile-reminder"
+                rows={3}
+                placeholder="Remind me Friday at 4pm to send the draft"
+                value={prompt}
+                disabled={saving}
+                aria-invalid={!!promptError}
+                onChange={(event) => { setPrompt(event.target.value); setPromptError(""); }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault(); if (loadState === "ready") submitPrompt(); else void openAccount();
+                  }
+                }}
+              />
+              {promptError && <p className="mobile-error" role="alert">{promptError}</p>}
+              {promptPreview?.ok && (
+                <p className="mobile-preview" aria-live="polite">
+                  <span>Will remind you</span>
+                  <strong>{longDateFormat.format(promptPreview.remindAt)} · {timeFormat.format(promptPreview.remindAt)}</strong>
+                  <span>{promptPreview.body}</span>
+                </p>
+              )}
+              <div className="mobile-composer-bottom">
+                <span>Try a time like “tomorrow at 9”</span>
+                <button type="submit" disabled={!prompt.trim() || saving}>
+                  {saving ? "Saving…" : loadState === "ready" ? "Send" : "Sign in"}<span aria-hidden="true"> ↗</span>
+                </button>
+              </div>
+            </form>
+
+            <div className="mobile-examples" aria-label="Example reminders">
+              <span>TRY AN EXAMPLE</span>
+              <div>
+                <button type="button" onClick={() => { setPrompt("Remind me in 20 minutes to study"); setPromptError(""); }}>Study in 20 minutes</button>
+                <button type="button" onClick={() => { setPrompt("Remind me tomorrow at 9am to call Mom"); setPromptError(""); }}>Call Mom tomorrow</button>
+              </div>
+            </div>
+
+            {lastSaved && (
+              <div className="mobile-saved" role="status">
+                <span className="mobile-saved-icon" aria-hidden="true">✓</span>
+                <div><strong>Reminder saved</strong><p>{lastSaved.body} · {longDateFormat.format(lastSaved.remindAt)} at {timeFormat.format(lastSaved.remindAt)}</p></div>
+              </div>
+            )}
+
+            {loadState === "ready" && <section className="mobile-upcoming" aria-label="Upcoming reminders">
+              <div className="mobile-section-head"><h2>Coming up</h2><button type="button" onClick={() => setMobileTab("calendar")}>View calendar <span aria-hidden="true">↗</span></button></div>
+              {upcoming.length ? (
+                <ul>{upcoming.map((reminder) => (
+                  <li key={reminder.id}><button type="button" onClick={() => setView({ kind: "reminder", id: reminder.id })}>
+                    <span className="mobile-upcoming-date">{monthDayFormat.format(reminder.remindAt)} <span>·</span> {timeFormat.format(reminder.remindAt)}</span>
+                    <strong>{reminder.body}</strong><span className="mobile-upcoming-arrow" aria-hidden="true">↗</span>
+                  </button></li>
+                ))}</ul>
+              ) : <p className="mobile-empty">Nothing coming up yet. Your next reminder starts here.</p>}
+            </section>}
+          </section>
+        )}
+        <div className="mobile-calendar-heading" hidden={mobileTab !== "calendar"}>
+          <p className="mobile-eyebrow">YOUR REMINDERS</p><h1 className="mobile-title">Calendar</h1>
+        </div>
         <div className="page-header">
           <div>
             <h1 className="page-title">Schedule</h1>
@@ -294,7 +372,7 @@ export function Dashboard() {
 
         {todayStart > 0 && (
           <>
-            <div className="calendar">
+            <div className={`calendar${mobileTab === "home" ? " mobile-calendar-hidden" : ""}`}>
               <div className="weekdays" aria-hidden="true">
                 {weekdays.map((day) => (
                   <div key={day}>{day}</div>
@@ -374,7 +452,7 @@ export function Dashboard() {
 
             <button
               type="button"
-              className="button more-weeks"
+              className={`button more-weeks${mobileTab === "home" ? " mobile-calendar-hidden" : ""}`}
               onClick={() => setWeeks((w) => w + 4)}
             >
               Show more weeks
@@ -382,6 +460,14 @@ export function Dashboard() {
           </>
         )}
       </main>
+
+      {loadState !== "loading" && (
+        <nav className="mobile-nav" aria-label="Main navigation">
+          <button type="button" aria-current={mobileTab === "home" ? "page" : undefined} onClick={() => { setMobileTab("home"); window.scrollTo(0, 0); }}><span aria-hidden="true">✦</span> Reminders</button>
+          <button type="button" aria-current={mobileTab === "calendar" ? "page" : undefined} onClick={() => { setMobileTab("calendar"); window.scrollTo(0, 0); }}><span aria-hidden="true">▦</span> Calendar</button>
+          <button type="button" onClick={openAccount}><span aria-hidden="true">◯</span> Account</button>
+        </nav>
+      )}
 
       <div className="scroll-hint" aria-hidden="true" />
 

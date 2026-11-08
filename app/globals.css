@@ -621,3 +621,85 @@ body {
     pointer-events: none;
   }
 }
+
+/* Phone quick-add view. The existing calendar stays available as the second tab. */
+.mobile-home, .mobile-calendar-heading, .mobile-nav { display: none; }
+
+@media (max-width: 640px) {
+  body:has(.mobile-home) { background: #09090b; color: #f7f7f8; }
+  .topbar { background: #09090b; border-color: #303035; }
+  .topbar-inner { height: 62px; padding: 0 22px; }
+  .brand { color: #f7f7f8; }
+  .brand-mark { background: #f7f7f8; color: #09090b; }
+  .page { padding: 30px 22px calc(112px + env(safe-area-inset-bottom)); }
+  .page-header { display: none; }
+  .mobile-home, .mobile-calendar-heading { display: block; }
+  .mobile-home[hidden], .mobile-calendar-heading[hidden], .mobile-calendar-hidden { display: none; }
+  .mobile-eyebrow { color: #9999a3; font-size: 10px; font-weight: 700; letter-spacing: .19em; }
+  .mobile-title { margin-top: 15px; font-size: clamp(34px, 9vw, 46px); font-weight: 650; letter-spacing: -.055em; line-height: 1.05; }
+  .mobile-intro { margin-top: 14px; color: #a3a3aa; font-size: 15px; }
+  .mobile-composer {
+    margin-top: 36px; padding: 18px; border: 1px solid #414147; border-radius: 20px;
+    background: linear-gradient(150deg, #1b1b1e, #111113);
+    box-shadow: 0 18px 40px rgb(0 0 0 / .24), inset 0 1px rgb(255 255 255 / .06);
+  }
+  .mobile-label { display: block; color: #aaaab2; font-size: 11px; font-weight: 650; letter-spacing: .13em; text-transform: uppercase; }
+  .mobile-composer textarea {
+    display: block; width: 100%; min-height: 110px; margin-top: 16px; resize: vertical;
+    border: 0; outline: 0; background: transparent; color: #fff; font: inherit;
+    font-size: 21px; letter-spacing: -.025em; line-height: 1.4;
+  }
+  .mobile-composer textarea::placeholder { color: #81818a; }
+  .mobile-composer textarea:focus-visible { outline: 2px solid #aaa; outline-offset: 5px; border-radius: 3px; }
+  .mobile-composer textarea[aria-invalid="true"] { color: #ffd2d2; }
+  .mobile-error { margin: 0 0 14px; color: #ff9f9f; font-size: 13px; line-height: 1.4; }
+  .mobile-preview { display: flex; flex-wrap: wrap; gap: 5px 8px; padding: 12px 0 15px; border-top: 1px solid #333338; color: #a5a5ae; font-size: 12px; }
+  .mobile-preview strong { color: #f4f4f5; font-weight: 600; }
+  .mobile-preview span:last-child { flex-basis: 100%; }
+  .mobile-composer-bottom { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 13px; border-top: 1px solid #333338; }
+  .mobile-composer-bottom > span { color: #92929b; font-size: 11px; line-height: 1.35; }
+  .mobile-composer-bottom button { flex: none; min-width: 94px; height: 44px; border-radius: 11px; background: #f6f6f7; color: #111113; font-size: 14px; font-weight: 650; }
+  .mobile-composer-bottom button:disabled { opacity: .45; }
+  .mobile-examples { margin-top: 24px; }
+  .mobile-examples > span { color: #8d8d97; font-size: 10px; font-weight: 650; letter-spacing: .15em; }
+  .mobile-examples > div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .mobile-examples button { min-height: 38px; padding: 0 13px; border: 1px solid #3b3b41; border-radius: 999px; background: #171719; color: #e4e4e7; font-size: 12px; }
+  .mobile-saved { display: flex; align-items: flex-start; gap: 12px; margin-top: 26px; padding: 15px; border: 1px solid #45454b; border-radius: 14px; background: #19191c; }
+  .mobile-saved-icon { display: grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 50%; background: #f5f5f6; color: #111; font-size: 15px; }
+  .mobile-saved strong { font-size: 14px; }
+  .mobile-saved p { margin-top: 4px; color: #aaaab1; font-size: 12px; line-height: 1.5; }
+  .mobile-upcoming { margin-top: 45px; }
+  .mobile-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .mobile-section-head h2 { font-size: 19px; font-weight: 600; letter-spacing: -.025em; }
+  .mobile-section-head button { color: #c1c1c8; font-size: 12px; }
+  .mobile-upcoming ul { margin-top: 14px; list-style: none; }
+  .mobile-upcoming li { border-top: 1px solid #303035; }
+  .mobile-upcoming li button { position: relative; display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 15px 28px 16px 1px; text-align: left; }
+  .mobile-upcoming-date { color: #a2a2aa; font-size: 12px; }
+  .mobile-upcoming-date span { padding: 0 3px; }
+  .mobile-upcoming li strong { font-size: 15px; font-weight: 500; }
+  .mobile-upcoming-arrow { position: absolute; top: 23px; right: 3px; color: #aaa; }
+  .mobile-empty { margin-top: 14px; padding: 22px; border: 1px solid #303035; border-radius: 14px; color: #a3a3aa; font-size: 13px; line-height: 1.5; }
+  .mobile-calendar-heading { margin-bottom: 25px; }
+  .calendar { border-color: #303035; background: #171719; }
+  .weekdays { border-color: #303035; background: #171719; color: #aaaab2; }
+  .days { background: #303035; }
+  .day { background: #171719; }
+  .day-past { background: #101012; }
+  .day-today .day-date, .day-count { background: #f4f4f5; color: #111; }
+  .mobile-nav {
+    position: fixed; right: 0; bottom: 0; left: 0; z-index: 5; display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    padding: 8px max(12px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    border-top: 1px solid #333338; background: #141416;
+  }
+  .mobile-nav button { display: grid; justify-items: center; gap: 3px; min-height: 49px; color: #96969e; font-size: 11px; }
+  .mobile-nav button span { font-size: 20px; line-height: 25px; }
+  .mobile-nav button[aria-current="page"] { color: #fff; }
+  .mobile-composer-bottom button:focus-visible, .mobile-examples button:focus-visible,
+  .mobile-nav button:focus-visible, .mobile-upcoming button:focus-visible,
+  .mobile-section-head button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  .scroll-hint { height: 78px; background: linear-gradient(transparent, #09090b); }
+  .toast { bottom: calc(84px + env(safe-area-inset-bottom)); width: max-content; max-width: calc(100% - 32px); text-align: center; }
+}
+
