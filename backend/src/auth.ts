@@ -174,7 +174,7 @@ async function finishGoogleSignIn(request: Request, db: D1Database, config: Goog
 		return failed("Could not save the Google account or session in D1.");
 	}
 
-	return redirectWithCookies(new URL("/", config.redirect), [
+	return redirectWithCookies(new URL("/calendar", config.redirect), [
 		clearFlow,
 		cookie(sessionCookie, token, sessionLifetime, config.redirect),
 	]);

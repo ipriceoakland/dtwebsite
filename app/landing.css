@@ -1,0 +1,295 @@
+.landing {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 100svh;
+  overflow: hidden;
+  color: #f4f4f4;
+  color-scheme: dark;
+  background: #030303;
+}
+
+.landing-tide {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.landing-tide-dust {
+  animation: landing-dust-drift 18s ease-in-out infinite alternate;
+}
+
+@keyframes landing-dust-drift {
+  from { opacity: 0.62; transform: translate(-3px, 4px); }
+  to { opacity: 1; transform: translate(7px, -8px); }
+}
+
+.landing-header {
+  display: flex;
+  align-items: center;
+  padding: 24px clamp(22px, 4vw, 70px);
+}
+
+.landing-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  width: fit-content;
+  color: #f4f4f4;
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  text-decoration: none;
+}
+
+.landing-brand > span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: #f3f3f3;
+  color: #111;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.06em;
+}
+
+.landing-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(100%, 1380px);
+  margin-inline: auto;
+  padding: clamp(42px, 8vh, 105px) 24px 110px;
+  text-align: center;
+  animation: landing-arrive 680ms cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.landing-hero h1 {
+  margin: 0;
+  font-size: clamp(2.65rem, 5.45vw, 7.75rem);
+  font-weight: 650;
+  letter-spacing: -0.062em;
+  line-height: 1.02;
+  text-wrap: balance;
+}
+
+.landing-signin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: clamp(250px, 24vw, 365px);
+  min-height: clamp(53px, 4.25vw, 72px);
+  margin-top: clamp(27px, 4.2vh, 43px);
+  padding: 0 28px;
+  border: 1px solid #dedede;
+  border-radius: 11px;
+  color: #171717;
+  background: #f6f6f6;
+  font-size: clamp(1rem, 1.35vw, 1.25rem);
+  font-weight: 600;
+  box-shadow: 0 1px 0 #fff, 0 9px 28px #0008;
+  text-decoration: none;
+  transition: background-color 180ms ease, transform 180ms ease;
+}
+
+.landing-signin:hover {
+  transform: translateY(-2px);
+  background: #fff;
+}
+
+.landing-demo {
+  width: min(100%, max(560px, 62vw), 1230px);
+  margin-top: clamp(29px, 4.7vh, 54px);
+}
+
+.landing-composer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 10px 9px 21px;
+  border: 1px solid #727272;
+  border-radius: 16px;
+  background: linear-gradient(115deg, #1d1d1df5, #111111fa 74%);
+  box-shadow: 0 18px 54px #000a, inset 0 1px 0 #fff2;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.landing-composer:focus-within {
+  border-color: #adadad;
+  box-shadow: 0 16px 55px #0007, 0 0 0 2px #fff2;
+}
+
+.landing-input-wrap {
+  position: relative;
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.landing-input-wrap > * {
+  grid-area: 1 / 1;
+  min-width: 0;
+  font-size: clamp(1rem, 2vw, 1.75rem);
+  line-height: 1.45;
+}
+
+.landing-input-wrap input {
+  z-index: 1;
+  width: 100%;
+  min-height: 43px;
+  outline: none;
+  color: #f8f8f8;
+}
+
+.landing-example {
+  align-self: center;
+  overflow: hidden;
+  color: #e1e1e1;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: landing-example-in 420ms ease both;
+}
+
+.landing-example::after {
+  content: "";
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  margin-left: 5px;
+  vertical-align: -0.12em;
+  background: #d8d8d8;
+}
+
+.landing-input-wrap:focus-within .landing-example {
+  color: #929292;
+}
+
+.landing-input-wrap:focus-within .landing-example::after {
+  visibility: hidden;
+}
+
+.landing-send {
+  display: grid;
+  flex: 0 0 46px;
+  place-items: center;
+  height: 46px;
+  border-radius: 9px;
+  color: #151515;
+  background: #f3f3f3;
+  box-shadow: 0 1px 0 #fff, 0 4px 13px #0007;
+  cursor: pointer;
+  transition: background-color 160ms ease, transform 160ms ease;
+}
+
+.landing-send:hover {
+  transform: translateX(2px);
+  background: #fff;
+}
+
+.landing-example-label {
+  margin: 24px 0 11px;
+  color: #bdbdbd;
+  font-size: 14px;
+}
+
+.landing-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 9px;
+}
+
+.landing-chips button {
+  padding: 8px 15px;
+  border: 1px solid #626262;
+  border-radius: 999px;
+  background: linear-gradient(#1a1a1a, #121212);
+  color: #e7e7e7;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 180ms ease, border-color 180ms ease;
+}
+
+.landing-chips button:hover {
+  border-color: #a7a7a7;
+  background: #252525;
+}
+
+.landing :is(a, button):focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 4px;
+}
+
+.landing-auth-error,
+.landing-demo-message {
+  margin-top: 16px;
+  color: #e2e2e2;
+  font-size: 14px;
+}
+
+.landing-preview {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px 12px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 22px auto 0;
+  padding: 11px 16px;
+  border: 1px solid #545454;
+  border-radius: 10px;
+  background: #151515;
+  color: #e7e7e7;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+  animation: landing-example-in 260ms ease both;
+}
+
+.landing-preview > :is(span, time) {
+  color: #b5b5b5;
+}
+
+@keyframes landing-arrive {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes landing-example-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 600px) {
+  .landing-header { padding: 20px; }
+  .landing-hero { padding: clamp(42px, 9vh, 80px) 18px 95px; }
+  .landing-hero h1 { font-size: clamp(2.35rem, 9.5vw, 3.5rem); }
+  .landing-tide { left: -48%; width: 150%; }
+  .landing-desktop-break { display: none; }
+  .landing-signin { min-width: min(100%, 238px); }
+  .landing-composer { gap: 7px; padding-left: 12px; }
+  .landing-example { white-space: normal; }
+  .landing-example-label { margin-top: 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing *,
+  .landing *::before,
+  .landing *::after {
+    animation: none;
+    transition: none;
+  }
+
+  .landing-signin:hover,
+  .landing-send:hover { transform: none; }
+}
