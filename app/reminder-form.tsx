@@ -7,6 +7,8 @@ import type { Reminder } from "./dashboard";
 type ReminderFormProps = {
   reminder?: Reminder;
   day: number;
+  saving: boolean;
+  error: string;
   onSave: (body: string, remindAt: number) => void;
   onDelete: () => void;
   onCancel: () => void;
@@ -19,6 +21,8 @@ const digitsOnly = (value: string) => value.replace(/\D/g, "").slice(0, 2);
 export function ReminderForm({
   reminder,
   day,
+  saving,
+  error,
   onSave,
   onDelete,
   onCancel,
@@ -38,6 +42,7 @@ export function ReminderForm({
 
   function submit(e: FormEvent) {
     e.preventDefault();
+    if (saving) return;
 
     const h = Number(hour);
     const m = Number(minute);
@@ -57,7 +62,7 @@ export function ReminderForm({
     if (!date) next.date = "Choose a date.";
     if (hour === "" || minute === "" || h < 1 || h > 12 || m > 59)
       next.time = "Enter a time like 9:30.";
-    else if (date && remindAt <= Date.now())
+    else if (date && (!Number.isFinite(remindAt) || remindAt <= Date.now()))
       next.time = "Choose a time in the future.";
 
     setErrors(next);
@@ -66,7 +71,10 @@ export function ReminderForm({
 
   return (
     <>
-      <Modal title={reminder ? "Edit reminder" : "New reminder"} onClose={onCancel}>
+      <Modal
+        title={reminder ? "Edit reminder" : "New reminder"}
+        onClose={() => { if (!saving) onCancel(); }}
+      >
         <form
           className="form"
           onSubmit={submit}
@@ -80,6 +88,7 @@ export function ReminderForm({
               className="input"
               value={body}
               maxLength={320}
+              disabled={saving}
               placeholder="Study for exam"
               aria-invalid={!!errors.body}
               onChange={(e) => setBody(e.target.value)}
@@ -92,6 +101,7 @@ export function ReminderForm({
             <input
               id="reminder-date"
               type="date"
+              disabled={saving}
               className="input"
               value={date}
               aria-invalid={!!errors.date}
@@ -113,6 +123,7 @@ export function ReminderForm({
                 className="input time-input"
                 inputMode="numeric"
                 aria-label="Hour"
+                disabled={saving}
                 value={hour}
                 aria-invalid={!!errors.time}
                 onChange={(e) => setHour(digitsOnly(e.target.value))}
@@ -122,6 +133,7 @@ export function ReminderForm({
                 className="input time-input"
                 inputMode="numeric"
                 aria-label="Minute"
+                disabled={saving}
                 value={minute}
                 aria-invalid={!!errors.time}
                 onChange={(e) => setMinute(digitsOnly(e.target.value))}
@@ -129,6 +141,7 @@ export function ReminderForm({
               <div className="segmented">
                 <button
                   type="button"
+                  disabled={saving}
                   aria-pressed={!pm}
                   onClick={() => setPm(false)}
                 >
@@ -136,6 +149,7 @@ export function ReminderForm({
                 </button>
                 <button
                   type="button"
+                  disabled={saving}
                   aria-pressed={pm}
                   onClick={() => setPm(true)}
                 >
@@ -152,45 +166,50 @@ export function ReminderForm({
                 type="button"
                 className="button button-danger"
                 onClick={() => setConfirmingDelete(true)}
+                disabled={saving}
               >
-                Delete
+                Cancel reminder
               </button>
             )}
             <span className="spacer" />
-            <button type="button" className="button" onClick={onCancel}>
+            <button type="button" className="button" onClick={onCancel} disabled={saving}>
               Cancel
             </button>
-            <button type="submit" className="button button-primary">
-              Confirm
+            <button type="submit" className="button button-primary" disabled={saving}>
+              {saving && !confirmingDelete ? "Saving…" : "Confirm"}
             </button>
           </div>
+          {error && !confirmingDelete && <p className="field-error" role="alert">{error}</p>}
         </form>
       </Modal>
 
       {reminder && confirmingDelete && (
         <Modal
-          title="Delete this reminder?"
+          title="Cancel this reminder?"
           small
-          onClose={() => setConfirmingDelete(false)}
+          onClose={() => { if (!saving) setConfirmingDelete(false); }}
         >
           <p className="modal-text">
-            “{reminder.body}” will be removed and you won’t get a text for it.
+            “{reminder.body}” will be removed from your calendar.
           </p>
+          {error && <p className="field-error" role="alert">{error}</p>}
           <div className="modal-actions">
             <span className="spacer" />
             <button
               type="button"
               className="button"
               onClick={() => setConfirmingDelete(false)}
+              disabled={saving}
             >
-              Cancel
+              Keep reminder
             </button>
             <button
               type="button"
               className="button button-danger-solid"
               onClick={onDelete}
+              disabled={saving}
             >
-              Delete
+              {saving ? "Cancelling…" : "Cancel reminder"}
             </button>
           </div>
         </Modal>

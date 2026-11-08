@@ -116,6 +116,13 @@ export default {
 			}
 		}
 		const reminderMatch = path.match(/^\/api\/reminders\/([0-9]+)$/);
+		if ((path === "/api/reminders" || reminderMatch) && ["POST", "PATCH", "DELETE"].includes(request.method)) {
+			const origin = request.headers.get("Origin");
+			const appOrigin = URL.parse(env.GOOGLE_REDIRECT_URI ?? "")?.origin ?? new URL(request.url).origin;
+			if (origin && origin !== appOrigin) {
+				return Response.json({ error: "Forbidden" }, { status: 403 });
+			}
+		}
 
 if (reminderMatch) {
 	const reminderId = Number(reminderMatch[1]);
@@ -355,7 +362,7 @@ if (reminderMatch) {
 					.bind(userId)
 					.all();
 
-				return Response.json({ reminders: rows.results });
+				return Response.json({ reminders: rows.results }, { headers: { "Cache-Control": "no-store" } });
 			} catch {
 				return Response.json(
 					{ error: "Unable to load reminders" },

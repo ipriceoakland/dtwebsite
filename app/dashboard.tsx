@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Modal } from "./modal";
 import { ReminderForm } from "./reminder-form";
 import { parseReminder } from "./parse-reminder";
@@ -10,8 +10,17 @@ export type Reminder = {
   id: number;
   body: string;
   remindAt: number;
-  status: "pending" | "sent" | "failed";
+  status: "pending" | "sending" | "sent" | "failed" | "cancelled";
 };
+
+type ApiReminder = Omit<Reminder, "remindAt"> & { remind_at: number };
+type ReminderChange =
+  | { kind: "save"; id?: number; body: string; remindAt: number }
+  | { kind: "delete"; id: number };
+
+function fromApiReminder({ id, body, remind_at, status }: ApiReminder): Reminder {
+  return { id, body, remindAt: remind_at * 1000, status };
+}
 
 type View =
   | { kind: "reminder"; id: number }
@@ -22,7 +31,9 @@ type View =
 type Account = { user: { display_name: string | null } | null } | { error: true };
 
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const statusLabels = { pending: "Pending", sent: "Sent", failed: "Failed" };
+const statusLabels = {
+  pending: "Pending", sending: "Sending", sent: "Sent", failed: "Failed", cancelled: "Cancelled",
+};
 
 const timeFormat = new Intl.DateTimeFormat(undefined, {
   hour: "numeric",
@@ -45,20 +56,59 @@ const getTodayStart = () => new Date().setHours(0, 0, 0, 0);
 const getTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 const getSignInFailed = () => new URLSearchParams(window.location.search).get("signin") === "failed";
 
-let nextId = 0;
-
 export function Dashboard() {
   const todayStart = useSyncExternalStore(subscribe, getTodayStart, () => 0);
   const timeZone = useSyncExternalStore(subscribe, getTimeZone, () => "");
   const signInFailed = useSyncExternalStore(subscribe, getSignInFailed, () => false);
 
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "signed-out" | "error">("loading");
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [view, setView] = useState<View | null>(null);
   const [weeks, setWeeks] = useState(6);
   const [prompt, setPrompt] = useState("");
   const [promptError, setPromptError] = useState("");
+  const [formError, setFormError] = useState("");
   const [toast, setToast] = useState("");
   const [account, setAccount] = useState<Account | null>(null);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadReminders() {
+      try {
+        const response = await fetch("/api/reminders", { cache: "no-store", signal: controller.signal });
+        if (controller.signal.aborted) return;
+        if (response.status === 401) {
+          setReminders([]);
+          setLoadState("signed-out");
+          return;
+        }
+        if (!response.ok) throw new Error("Unable to load reminders");
+        const { reminders: rows }: { reminders: ApiReminder[] } = await response.json();
+        if (controller.signal.aborted) return;
+        setReminders(rows.map(fromApiReminder).filter((reminder) =>
+          reminder.status !== "cancelled" && Number.isFinite(new Date(reminder.remindAt).getTime()),
+        ));
+        setLoadState("ready");
+      } catch {
+        if (!controller.signal.aborted) setLoadState("error");
+      }
+    }
+
+    function reloadFromHistory(event: PageTransitionEvent) {
+      if (event.persisted) window.location.reload();
+    }
+
+    void loadReminders();
+    window.addEventListener("pageshow", reloadFromHistory);
+    return () => {
+      controller.abort();
+      window.removeEventListener("pageshow", reloadFromHistory);
+    };
+  }, [loadAttempt]);
 
   async function openAccount() {
     setView({ kind: "account" });
@@ -77,29 +127,61 @@ export function Dashboard() {
     setTimeout(() => setToast((t) => (t === message ? "" : t)), 3000);
   }
 
-  function saveReminder(body: string, remindAt: number, id?: number) {
-    if (id === undefined) {
-      const reminder: Reminder = {
-        id: nextId++,
-        body,
-        remindAt,
-        status: "pending",
-      };
-      setReminders((prev) => [...prev, reminder]);
-      showToast("Reminder added.");
-    } else {
-      setReminders((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, body, remindAt } : r)),
-      );
-      showToast("Reminder updated.");
-    }
-    setView(null);
-  }
+  async function changeReminder(change: ReminderChange, source: "prompt" | "form") {
+    if (savingRef.current || loadState !== "ready") return;
 
-  function deleteReminder(id: number) {
-    setReminders((prev) => prev.filter((r) => r.id !== id));
-    setView(null);
-    showToast("Reminder deleted.");
+    const setError = source === "prompt" ? setPromptError : setFormError;
+    const { id } = change;
+    const path = id === undefined ? "/api/reminders" : `/api/reminders/${id}`;
+    savingRef.current = true;
+    setSaving(true);
+    setError("");
+
+    try {
+      const response = await fetch(path, change.kind === "delete" ? { method: "DELETE" } : {
+        method: id === undefined ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: change.body, remind_at: Math.floor(change.remindAt / 1000) }),
+      });
+      if (response.status === 401) {
+        setReminders([]);
+        setView(null);
+        setLoadState("signed-out");
+        return;
+      }
+      if (response.status === 404 && id !== undefined) {
+        setError("This reminder is no longer pending. Refresh the page to see its current status.");
+        return;
+      }
+      if (!response.ok) {
+        const details: unknown = await response.json().catch(() => null);
+        const message = details && typeof details === "object" && "error" in details ? details.error : null;
+        setError(typeof message === "string" ? message : "Couldn’t save the change. Try again.");
+        return;
+      }
+
+      if (change.kind === "delete") {
+        setReminders((previous) => previous.filter((reminder) => reminder.id !== id));
+        showToast("Reminder cancelled.");
+      } else {
+        const { reminder: row }: { reminder: ApiReminder } = await response.json();
+        const saved = fromApiReminder(row);
+        setReminders((previous) => id === undefined ? [...previous, saved] :
+          previous.map((reminder) => reminder.id === id ? saved : reminder));
+        if (source === "prompt") {
+          setPrompt("");
+          showToast(`Reminder saved for ${longDateFormat.format(saved.remindAt)} at ${timeFormat.format(saved.remindAt)}.`);
+        } else {
+          showToast(id === undefined ? "Reminder added." : "Reminder updated.");
+        }
+      }
+      if (source === "form") setView(null);
+    } catch {
+      setError("Couldn’t reach the reminder service. Refresh the page to check whether the change was saved.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   }
 
   function submitPrompt() {
@@ -111,13 +193,11 @@ export function Dashboard() {
       setPromptError(result.error);
       return;
     }
-    saveReminder(result.body, result.remindAt);
-    // Say when it landed, so a misread time is easy to spot.
-    showToast(
-      `Reminder set for ${longDateFormat.format(result.remindAt)} at ${timeFormat.format(result.remindAt)}.`,
-    );
-    setPrompt("");
-    setPromptError("");
+    if (!Number.isFinite(new Date(result.remindAt).getTime())) {
+      setPromptError("Choose a valid date and time.");
+      return;
+    }
+    void changeReminder({ kind: "save", body: result.body, remindAt: result.remindAt }, "prompt");
   }
 
   // Group reminders by the local day they fall on, in time order.
@@ -181,6 +261,7 @@ export function Dashboard() {
               aria-label="Add a reminder"
               aria-invalid={!!promptError}
               value={prompt}
+              disabled={loadState !== "ready" || saving}
               onChange={(e) => {
                 setPrompt(e.target.value);
                 setPromptError("");
@@ -192,9 +273,24 @@ export function Dashboard() {
                 }
               }}
             />
-            {promptError && <p className="field-error">{promptError}</p>}
+            {promptError && <p className="field-error" role="alert">{promptError}</p>}
           </div>
         </div>
+
+        {loadState === "loading" && <p role="status">Loading reminders…</p>}
+        {loadState === "signed-out" && (
+          <p>Sign in to see and save reminders.{" "}
+            <button type="button" className="button" onClick={openAccount}>Open Account</button>
+          </p>
+        )}
+        {loadState === "error" && (
+          <p>Couldn’t load reminders.{" "}
+            <button type="button" className="button" onClick={() => {
+              setLoadState("loading");
+              setLoadAttempt((attempt) => attempt + 1);
+            }}>Retry</button>
+          </p>
+        )}
 
         {todayStart > 0 && (
           <>
@@ -227,7 +323,7 @@ export function Dashboard() {
                     >
                       <div className="day-head">
                         <span className="day-date">{label}</span>
-                        {!isPast && (
+                        {!isPast && loadState === "ready" && (
                           <button
                             type="button"
                             className="add-button"
@@ -306,19 +402,21 @@ export function Dashboard() {
             </dd>
           </dl>
           <div className="modal-actions">
-            <button
-              type="button"
-              className="button"
-              onClick={() =>
-                setView({
-                  kind: "form",
-                  day: new Date(openReminder.remindAt).setHours(0, 0, 0, 0),
-                  id: openReminder.id,
-                })
-              }
-            >
-              Edit
-            </button>
+            {openReminder.status === "pending" && (
+              <button
+                type="button"
+                className="button"
+                onClick={() =>
+                  setView({
+                    kind: "form",
+                    day: new Date(openReminder.remindAt).setHours(0, 0, 0, 0),
+                    id: openReminder.id,
+                  })
+                }
+              >
+                Edit
+              </button>
+            )}
             <span className="spacer" />
             <button
               type="button"
@@ -347,15 +445,15 @@ export function Dashboard() {
                   </p>
                   <p className="day-list-body">{r.body}</p>
                 </div>
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() =>
-                    setView({ kind: "form", day: view.day, id: r.id })
-                  }
-                >
-                  Edit
-                </button>
+                {r.status === "pending" && (
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => setView({ kind: "form", day: view.day, id: r.id })}
+                  >
+                    Edit
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -373,15 +471,22 @@ export function Dashboard() {
       )}
 
       {/* Window C: add or edit. */}
-      {view?.kind === "form" && (view.id === undefined || openReminder) && (
+      {view?.kind === "form" && (view.id === undefined || openReminder?.status === "pending") && (
         <ReminderForm
           reminder={openReminder}
           day={view.day}
+          saving={saving}
+          error={formError}
           onSave={(body, remindAt) =>
-            saveReminder(body, remindAt, openReminder?.id)
+            changeReminder({ kind: "save", body, remindAt, id: openReminder?.id }, "form")
           }
-          onDelete={() => openReminder && deleteReminder(openReminder.id)}
-          onCancel={() => setView(null)}
+          onDelete={() => {
+            if (openReminder) void changeReminder({ kind: "delete", id: openReminder.id }, "form");
+          }}
+          onCancel={() => {
+            setFormError("");
+            setView(null);
+          }}
         />
       )}
 

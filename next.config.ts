@@ -9,10 +9,10 @@ const nextConfig: NextConfig = {
       (process.env.NODE_ENV === "development" ? "http://127.0.0.1:8787" : null);
     if (!backendOrigin) return [];
 
-    return [{
-      source: "/api/auth/:path*",
-      destination: new URL("/api/auth/:path*", backendOrigin).href,
-    }];
+    return ["/api/auth/:path*", "/api/reminders/:path*"].map((source) => ({
+      source,
+      destination: new URL(source, backendOrigin).href,
+    }));
   },
   turbopack: {
     rules: {
