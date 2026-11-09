@@ -13,9 +13,11 @@ export type Reminder = {
   status: "pending" | "sending" | "sent" | "failed" | "cancelled";
 };
 
+type ChatExchange = { id: number; text: string; remindAt: number };
+
 type ApiReminder = Omit<Reminder, "remindAt"> & { remind_at: number };
 type ReminderChange =
-  | { kind: "save"; id?: number; body: string; remindAt: number }
+  | { kind: "save"; id?: number; body: string; remindAt: number; chatText?: string }
   | { kind: "delete"; id: number };
 
 function fromApiReminder({ id, body, remind_at, status }: ApiReminder): Reminder {
@@ -44,6 +46,10 @@ const longDateFormat = new Intl.DateTimeFormat(undefined, {
   month: "long",
   day: "numeric",
 });
+const monthFormat = new Intl.DateTimeFormat(undefined, {
+  month: "long",
+  year: "numeric",
+});
 const monthDayFormat = new Intl.DateTimeFormat(undefined, {
   month: "short",
   day: "numeric",
@@ -56,6 +62,20 @@ const getTodayStart = () => new Date().setHours(0, 0, 0, 0);
 const getTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 const getSignInFailed = () => new URLSearchParams(window.location.search).get("signin") === "failed";
 
+function getMonth(anchor: Date, offset: number) {
+  const first = new Date(anchor.getFullYear(), anchor.getMonth() + offset, 1);
+  const lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  const leadingCells = first.getDay();
+  const totalCells = Math.ceil((leadingCells + lastDay) / 7) * 7;
+  const cells = Array.from({ length: totalCells }, (_, index) => {
+    const day = index - leadingCells + 1;
+    return day >= 1 && day <= lastDay
+      ? new Date(first.getFullYear(), first.getMonth(), day)
+      : null;
+  });
+  return { first, cells };
+}
+
 export function Dashboard() {
   const todayStart = useSyncExternalStore(subscribe, getTodayStart, () => 0);
   const timeZone = useSyncExternalStore(subscribe, getTimeZone, () => "");
@@ -65,7 +85,10 @@ export function Dashboard() {
   const [loadState, setLoadState] = useState<"loading" | "ready" | "signed-out" | "error">("loading");
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [view, setView] = useState<View | null>(null);
-  const [weeks, setWeeks] = useState(6);
+  const [showYear, setShowYear] = useState(false);
+  const [monthOffset, setMonthOffset] = useState(0);
+  const [chat, setChat] = useState<ChatExchange[]>([]);
+  const chatLogRef = useRef<HTMLDivElement>(null);
   const [prompt, setPrompt] = useState("");
   const [mobileTab, setMobileTab] = useState<"home" | "calendar">("home");
   const [lastSaved, setLastSaved] = useState<Reminder | null>(null);
@@ -85,6 +108,7 @@ export function Dashboard() {
         if (controller.signal.aborted) return;
         if (response.status === 401) {
           setReminders([]);
+          setChat([]);
           setLoadState("signed-out");
           return;
         }
@@ -111,6 +135,11 @@ export function Dashboard() {
       window.removeEventListener("pageshow", reloadFromHistory);
     };
   }, [loadAttempt]);
+
+  useEffect(() => {
+    const log = chatLogRef.current;
+    if (log) log.scrollTop = log.scrollHeight;
+  }, [chat]);
 
   async function openAccount() {
     setView({ kind: "account" });
@@ -147,6 +176,7 @@ export function Dashboard() {
       });
       if (response.status === 401) {
         setReminders([]);
+        setChat([]);
         setView(null);
         setLoadState("signed-out");
         return;
@@ -173,7 +203,13 @@ export function Dashboard() {
         if (source === "prompt") {
           setPrompt("");
           setLastSaved(saved);
-          showToast(`Reminder saved for ${longDateFormat.format(saved.remindAt)} at ${timeFormat.format(saved.remindAt)}.`);
+          if (change.chatText) {
+            const text = change.chatText;
+            setChat((previous) => [...previous, { id: saved.id, text, remindAt: saved.remindAt }]);
+            const date = new Date(saved.remindAt);
+            const today = new Date(todayStart);
+            setMonthOffset((date.getFullYear() - today.getFullYear()) * 12 + date.getMonth() - today.getMonth());
+          }
         } else {
           showToast(id === undefined ? "Reminder added." : "Reminder updated.");
         }
@@ -187,7 +223,7 @@ export function Dashboard() {
     }
   }
 
-  function submitPrompt() {
+  function submitPrompt(fromChat = false) {
     const text = prompt.trim();
     if (!text) return;
 
@@ -200,7 +236,12 @@ export function Dashboard() {
       setPromptError("Choose a valid date and time.");
       return;
     }
-    void changeReminder({ kind: "save", body: result.body, remindAt: result.remindAt }, "prompt");
+    void changeReminder({
+      kind: "save",
+      body: result.body,
+      remindAt: result.remindAt,
+      chatText: fromChat ? text : undefined,
+    }, "prompt");
   }
 
   // Group reminders by the local day they fall on, in time order.
@@ -210,17 +251,11 @@ export function Dashboard() {
     byDay.set(key, [...(byDay.get(key) ?? []), r]);
   }
 
-  // Start the grid on the Sunday of the current week.
   const today = new Date(todayStart);
-  const days = Array.from(
-    { length: weeks * 7 },
-    (_, i) =>
-      new Date(
-        today.getFullYear(),
-        today.getMonth(),
-        today.getDate() - today.getDay() + i,
-      ),
-  );
+  const visibleMonth = todayStart > 0 ? getMonth(today, monthOffset) : null;
+  const mobileMonths = todayStart > 0
+    ? Array.from({ length: showYear ? 13 : 2 }, (_, offset) => getMonth(today, offset))
+    : [];
 
   const openReminder =
     view?.kind === "reminder" || view?.kind === "form"
@@ -230,13 +265,92 @@ export function Dashboard() {
   const promptPreview = prompt.trim() ? parseReminder(prompt) : null;
   const upcoming = [...reminders]
     .filter((reminder) => reminder.status === "pending" && reminder.remindAt > Date.now())
-    .sort((a, b) => a.remindAt - b.remindAt)
-    .slice(0, 4);
+    .sort((a, b) => a.remindAt - b.remindAt);
+
+  function renderDay(day: Date) {
+    const start = day.getTime();
+    const items = byDay.get(start) ?? [];
+    const isPast = start < todayStart;
+    return (
+      <div
+        key={start}
+        className={[
+          "day",
+          start === todayStart && "day-today",
+          isPast && "day-past",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        <div className="day-head">
+          <span className="day-date">{day.getDate()}</span>
+          {!isPast && loadState === "ready" && (
+            <button
+              type="button"
+              className="add-button"
+              aria-label={`Add reminder on ${longDateFormat.format(day)}`}
+              onClick={() => setView({ kind: "form", day: start })}
+            >
+              +
+            </button>
+          )}
+        </div>
+
+        {/* Desktop: each reminder is its own button. */}
+        <ul className="day-reminders">
+          {items.map((r) => (
+            <li key={r.id}>
+              <button
+                type="button"
+                className="reminder-chip"
+                onClick={() =>
+                  setView({ kind: "reminder", id: r.id })
+                }
+              >
+                <span className="chip-time">
+                  {timeFormat.format(r.remindAt)}
+                </span>{" "}
+                {r.body}
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        {/* Mobile: only the count, which opens the day. */}
+        {items.length > 0 && (
+          <button
+            type="button"
+            className="day-count"
+            aria-label={`${items.length} ${items.length === 1 ? "reminder" : "reminders"} on ${longDateFormat.format(day)}`}
+            onClick={() => setView({ kind: "day", day: start })}
+          >
+            {items.length}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  function renderMonthGrid(cells: (Date | null)[]) {
+    return (
+      <div className="calendar">
+        <div className="weekdays" aria-hidden="true">
+          {weekdays.map((day) => <div key={day}>{day}</div>)}
+        </div>
+        <div className="days">
+          {cells.map((day, index) => day
+            ? renderDay(day)
+            : <div key={`empty-${index}`} className="day schedule-day-empty" aria-hidden="true" />
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
       <header className="topbar">
-        <div className="topbar-inner">
+        <div className="topbar-inner schedule-topbar-inner">
           <button
             type="button"
             className="brand"
@@ -248,10 +362,16 @@ export function Dashboard() {
             </span>
             <span className="brand-name">Deltatime</span>
           </button>
+          <button type="button" className="schedule-account" aria-label="Open account" onClick={openAccount}>
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+              <circle cx="12" cy="8" r="3" />
+              <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
+            </svg>
+          </button>
         </div>
       </header>
 
-      <main className="page">
+      <main className="page schedule-page">
         {signInFailed && (
           <p className="field-error" role="alert">Google sign-in couldn’t be completed. Open Account to try again.</p>
         )}
@@ -311,7 +431,7 @@ export function Dashboard() {
             {loadState === "ready" && <section className="mobile-upcoming" aria-label="Upcoming reminders">
               <div className="mobile-section-head"><h2>Coming up</h2><button type="button" onClick={() => setMobileTab("calendar")}>View calendar <span aria-hidden="true">↗</span></button></div>
               {upcoming.length ? (
-                <ul>{upcoming.map((reminder) => (
+                <ul>{upcoming.slice(0, 4).map((reminder) => (
                   <li key={reminder.id}><button type="button" onClick={() => setView({ kind: "reminder", id: reminder.id })}>
                     <span className="mobile-upcoming-date">{monthDayFormat.format(reminder.remindAt)} <span>·</span> {timeFormat.format(reminder.remindAt)}</span>
                     <strong>{reminder.body}</strong><span className="mobile-upcoming-arrow" aria-hidden="true">↗</span>
@@ -324,37 +444,6 @@ export function Dashboard() {
         <div className="mobile-calendar-heading" hidden={mobileTab !== "calendar"}>
           <p className="mobile-eyebrow">YOUR REMINDERS</p><h1 className="mobile-title">Calendar</h1>
         </div>
-        <div className="page-header">
-          <div>
-            <h1 className="page-title">Schedule</h1>
-            <p className="page-subtitle">
-              {timeZone ? `Times shown in ${timeZone}` : " "}
-            </p>
-          </div>
-          <div className="prompt">
-            <textarea
-              className="input prompt-input"
-              rows={1}
-              placeholder="Remind me to call mom Monday at 5pm"
-              aria-label="Add a reminder"
-              aria-invalid={!!promptError}
-              value={prompt}
-              disabled={loadState !== "ready" || saving}
-              onChange={(e) => {
-                setPrompt(e.target.value);
-                setPromptError("");
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  submitPrompt();
-                }
-              }}
-            />
-            {promptError && <p className="field-error" role="alert">{promptError}</p>}
-          </div>
-        </div>
-
         {loadState === "loading" && <p role="status">Loading reminders…</p>}
         {loadState === "signed-out" && (
           <p>Sign in to see and save reminders.{" "}
@@ -370,95 +459,143 @@ export function Dashboard() {
           </p>
         )}
 
-        {todayStart > 0 && (
-          <>
-            <div className={`calendar${mobileTab === "home" ? " mobile-calendar-hidden" : ""}`}>
-              <div className="weekdays" aria-hidden="true">
-                {weekdays.map((day) => (
-                  <div key={day}>{day}</div>
+        <div className={`schedule-mobile-calendar${mobileTab === "home" ? " mobile-calendar-hidden" : ""}`}>
+          <section className="schedule-months" aria-label="Calendar">
+            {mobileMonths.map(({ first, cells }) => (
+              <section className="schedule-month" key={first.getTime()}>
+                <h2 className="schedule-month-title">{monthFormat.format(first)}</h2>
+                {renderMonthGrid(cells)}
+              </section>
+            ))}
+            {mobileMonths.length > 0 && (
+              <button
+                type="button"
+                className="button schedule-more-months"
+                onClick={() => setShowYear((expanded) => !expanded)}
+                aria-expanded={showYear}
+              >
+                {showYear ? "Show fewer months" : "Show more months"}
+              </button>
+            )}
+          </section>
+        </div>
+
+        <div className="schedule-layout">
+          <section className="schedule-card schedule-desktop-calendar" aria-labelledby="schedule-title">
+            <h1 id="schedule-title" className="schedule-title">Schedule</h1>
+            {visibleMonth && (
+              <>
+                <div className="schedule-month-nav">
+                  <button
+                    type="button"
+                    className="button schedule-month-button"
+                    aria-label="Previous month"
+                    onClick={() => setMonthOffset((offset) => offset - 1)}
+                  >
+                    <span aria-hidden="true">‹</span>
+                  </button>
+                  <h2 aria-live="polite">{monthFormat.format(visibleMonth.first)}</h2>
+                  <button
+                    type="button"
+                    className="button schedule-month-button"
+                    aria-label="Next month"
+                    onClick={() => setMonthOffset((offset) => offset + 1)}
+                  >
+                    <span aria-hidden="true">›</span>
+                  </button>
+                  {monthOffset !== 0 && (
+                    <button type="button" className="button" onClick={() => setMonthOffset(0)}>
+                      Today
+                    </button>
+                  )}
+                </div>
+                {renderMonthGrid(visibleMonth.cells)}
+              </>
+            )}
+          </section>
+
+          <div className="schedule-side">
+            <section className="schedule-card schedule-chat" aria-labelledby="schedule-chat-title">
+              <h2 id="schedule-chat-title" className="schedule-title">Reminder chat</h2>
+              <div className="schedule-chat-log" role="log" aria-label="Reminder conversation" ref={chatLogRef}>
+                {chat.length === 0 && (
+                  <p className="schedule-empty">Try “Remind me Friday at 4 PM to send the draft.”</p>
+                )}
+                {chat.map(({ id, text, remindAt }) => (
+                  <div className="schedule-chat-exchange" key={id}>
+                    <p className="schedule-message schedule-message-user">{text}</p>
+                    <p className="schedule-message">
+                      Added to your calendar for {longDateFormat.format(remindAt)} at {timeFormat.format(remindAt)}.
+                    </p>
+                  </div>
                 ))}
               </div>
-              <div className="days">
-                {days.map((day, i) => {
-                  const start = day.getTime();
-                  const items = byDay.get(start) ?? [];
-                  const isPast = start < todayStart;
-                  const label =
-                    i === 0 || day.getDate() === 1
-                      ? monthDayFormat.format(day)
-                      : day.getDate();
+              <form
+                className="schedule-composer"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  submitPrompt(true);
+                }}
+              >
+                {promptError && <p className="field-error" role="alert">{promptError}</p>}
+                <div className="schedule-composer-row">
+                  <textarea
+                    className="input schedule-chat-input"
+                    rows={1}
+                    placeholder="Write a reminder…"
+                    aria-label="Write a reminder"
+                    aria-invalid={!!promptError}
+                    value={prompt}
+                    disabled={loadState !== "ready"}
+                    readOnly={saving}
+                    onChange={(event) => {
+                      setPrompt(event.target.value);
+                      setPromptError("");
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                        event.preventDefault();
+                        event.currentTarget.form?.requestSubmit();
+                      }
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    className="button schedule-send"
+                    aria-label={saving ? "Saving reminder" : "Send reminder"}
+                    disabled={loadState !== "ready" || saving || !prompt.trim()}
+                  >
+                    <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m21 3-7.5 18-3.8-6.7L3 10.5 21 3ZM21 3 9.7 14.3" />
+                    </svg>
+                  </button>
+                </div>
+              </form>
+            </section>
 
-                  return (
-                    <div
-                      key={start}
-                      className={[
-                        "day",
-                        start === todayStart && "day-today",
-                        isPast && "day-past",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                    >
-                      <div className="day-head">
-                        <span className="day-date">{label}</span>
-                        {!isPast && loadState === "ready" && (
-                          <button
-                            type="button"
-                            className="add-button"
-                            aria-label={`Add reminder on ${longDateFormat.format(day)}`}
-                            onClick={() => setView({ kind: "form", day: start })}
-                          >
-                            +
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Desktop: each reminder is its own button. */}
-                      <ul className="day-reminders">
-                        {items.map((r) => (
-                          <li key={r.id}>
-                            <button
-                              type="button"
-                              className="reminder-chip"
-                              onClick={() =>
-                                setView({ kind: "reminder", id: r.id })
-                              }
-                            >
-                              <span className="chip-time">
-                                {timeFormat.format(r.remindAt)}
-                              </span>{" "}
-                              {r.body}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-
-                      {/* Mobile: only the count, which opens the day. */}
-                      {items.length > 0 && (
-                        <button
-                          type="button"
-                          className="day-count"
-                          aria-label={`${items.length} ${items.length === 1 ? "reminder" : "reminders"} on ${longDateFormat.format(day)}`}
-                          onClick={() => setView({ kind: "day", day: start })}
-                        >
-                          {items.length}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <button
-              type="button"
-              className={`button more-weeks${mobileTab === "home" ? " mobile-calendar-hidden" : ""}`}
-              onClick={() => setWeeks((w) => w + 4)}
-            >
-              Show more weeks
-            </button>
-          </>
-        )}
+            <section className="schedule-card schedule-upcoming" aria-labelledby="schedule-upcoming-title">
+              <h2 id="schedule-upcoming-title" className="schedule-title">Upcoming reminders</h2>
+              {upcoming.length ? (
+                <ul className="schedule-upcoming-list">
+                  {upcoming.map((reminder) => (
+                    <li key={reminder.id}>
+                      <button type="button" onClick={() => setView({ kind: "reminder", id: reminder.id })}>
+                        <strong>{reminder.body}</strong>
+                        <time dateTime={new Date(reminder.remindAt).toISOString()}>
+                          {monthDayFormat.format(reminder.remindAt)} · {timeFormat.format(reminder.remindAt)}
+                        </time>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="schedule-empty">
+                  {loadState === "ready" ? "No upcoming reminders yet." : "Your upcoming reminders will appear here."}
+                </p>
+              )}
+            </section>
+          </div>
+        </div>
       </main>
 
       {loadState !== "loading" && (
