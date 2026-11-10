@@ -108,6 +108,7 @@ export function Dashboard() {
   const [account, setAccount] = useState<Account | null>(null);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
+  const [confirmDoneId, setConfirmDoneId] = useState<number | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -157,15 +158,20 @@ export function Dashboard() {
     const app = appRef.current;
     if (!viewport || !app) return;
 
-    function syncHeight() {
-      if (viewport && app && viewport.scale === 1) {
-        app.style.setProperty("--schedule-viewport-height", `${viewport.height}px`);
-      }
+    function syncViewport() {
+      if (!viewport || !app || viewport.scale !== 1) return;
+      app.style.setProperty("--schedule-viewport-height", `${viewport.height}px`);
+      app.style.setProperty("--schedule-viewport-top", `${viewport.offsetTop}px`);
+      app.classList.toggle("schedule-keyboard-open", viewport.height < window.innerHeight - 120);
     }
 
-    syncHeight();
-    viewport.addEventListener("resize", syncHeight);
-    return () => viewport.removeEventListener("resize", syncHeight);
+    syncViewport();
+    viewport.addEventListener("resize", syncViewport);
+    viewport.addEventListener("scroll", syncViewport);
+    return () => {
+      viewport.removeEventListener("resize", syncViewport);
+      viewport.removeEventListener("scroll", syncViewport);
+    };
   }, []);
 
   useEffect(() => {
@@ -220,6 +226,10 @@ export function Dashboard() {
     if (savingRef.current || loadState !== "ready") return;
 
     const setError = source === "prompt" ? setPromptError : setFormError;
+    const reportError = (message: string) => {
+      setError(message);
+      if (source === "form" && view === null) showToast(message);
+    };
     const { id } = change;
     const path = id === undefined ? "/api/reminders" : `/api/reminders/${id}`;
     savingRef.current = true;
@@ -240,13 +250,13 @@ export function Dashboard() {
         return;
       }
       if (response.status === 404 && id !== undefined) {
-        setError("This reminder is no longer pending. Refresh the page to see its current status.");
+        reportError("This reminder is no longer pending. Refresh the page to see its current status.");
         return;
       }
       if (!response.ok) {
         const details: unknown = await response.json().catch(() => null);
         const message = details && typeof details === "object" && "error" in details ? details.error : null;
-        setError(typeof message === "string" ? message : "Couldn’t save the change. Try again.");
+        reportError(typeof message === "string" ? message : "Couldn’t save the change. Try again.");
         return;
       }
 
@@ -273,7 +283,7 @@ export function Dashboard() {
       }
       if (source === "form") setView(null);
     } catch {
-      setError("Couldn’t reach the reminder service. Refresh the page to check whether the change was saved.");
+      reportError("Couldn’t reach the reminder service. Refresh the page to check whether the change was saved.");
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -322,6 +332,11 @@ export function Dashboard() {
   const upcoming = [...reminders]
     .filter((reminder) => reminder.status === "pending" && reminder.remindAt > Date.now())
     .sort((a, b) => a.remindAt - b.remindAt);
+  const upcomingByDay = new Map<number, Reminder[]>();
+  for (const reminder of upcoming) {
+    const day = new Date(reminder.remindAt).setHours(0, 0, 0, 0);
+    upcomingByDay.set(day, [...(upcomingByDay.get(day) ?? []), reminder]);
+  }
 
   function renderDay(day: Date) {
     const start = day.getTime();
@@ -436,6 +451,51 @@ export function Dashboard() {
           </li>
         ))}
       </ul>
+    );
+  }
+
+  function renderMobileUpcoming() {
+    if (upcoming.length === 0) return renderUpcoming();
+
+    return (
+      <div className="mobile-reminder-days">
+        {[...upcomingByDay].map(([day, items]) => (
+          <section key={day} className="mobile-reminder-day" aria-label={longDateFormat.format(day)}>
+            <h2>{longDateFormat.format(day)}</h2>
+            <ul>
+              {items.map((reminder) => (
+                <li key={reminder.id} className="mobile-reminder-card">
+                  <button
+                    type="button"
+                    className="mobile-reminder-check"
+                    aria-label={`Mark ${reminder.body} done`}
+                    disabled={saving}
+                    onClick={() => setConfirmDoneId(reminder.id)}
+                  >
+                    <span aria-hidden="true" />
+                  </button>
+                  <div className="mobile-reminder-copy">
+                    <strong>{reminder.body}</strong>
+                    <time dateTime={new Date(reminder.remindAt).toISOString()}>{timeFormat.format(reminder.remindAt)}</time>
+                  </div>
+                  <button
+                    type="button"
+                    className="mobile-reminder-settings"
+                    aria-label={`Settings for ${reminder.body}`}
+                    onClick={() => setView({ kind: "form", day, id: reminder.id })}
+                  >
+                    <svg aria-hidden="true" viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                      <circle cx="5" cy="12" r="1.8" />
+                      <circle cx="12" cy="12" r="1.8" />
+                      <circle cx="19" cy="12" r="1.8" />
+                    </svg>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
     );
   }
 
@@ -555,7 +615,7 @@ export function Dashboard() {
           <div className="mobile-view-header">
             <h1 id="mobile-upcoming-title">Upcoming</h1>
           </div>
-          {renderUpcoming()}
+          {renderMobileUpcoming()}
         </section>
 
         <div className="schedule-mobile-calendar" hidden={mobileTab !== "calendar"}>
@@ -705,6 +765,28 @@ export function Dashboard() {
           <div className="modal-actions">
             <button type="button" className="button button-primary" onClick={() => setView(null)}>
               Done
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {confirmDoneId !== null && (
+        <Modal title="Mark reminder done?" small onClose={() => setConfirmDoneId(null)}>
+          <p className="modal-text">You will not get notified for this reminder.</p>
+          <div className="modal-actions">
+            <button type="button" className="button" disabled={saving} onClick={() => setConfirmDoneId(null)}>Keep reminder</button>
+            <span className="spacer" />
+            <button
+              type="button"
+              className="button button-primary"
+              disabled={saving}
+              onClick={() => {
+                const id = confirmDoneId;
+                setConfirmDoneId(null);
+                void changeReminder({ kind: "delete", id }, "form");
+              }}
+            >
+              Mark done
             </button>
           </div>
         </Modal>

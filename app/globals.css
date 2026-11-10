@@ -754,6 +754,7 @@ body {
 @media (max-width: 767px) {
   body:has(.schedule-app) {
     background: #0a0a0b;
+    overflow: hidden;
   }
 
   .schedule-app {
@@ -769,6 +770,10 @@ body {
     --success: #4ade80;
     --warning: #fbbf24;
 
+    position: fixed;
+    top: var(--schedule-viewport-top, 0px);
+    right: 0;
+    left: 0;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
     height: 100dvh;
@@ -928,6 +933,13 @@ body {
     line-height: 22px;
   }
 
+  .schedule-app .input,
+  .schedule-app input,
+  .schedule-app textarea,
+  .schedule-app select {
+    font-size: 16px;
+  }
+
   .mobile-chat-composer .field-error {
     margin: 0 0 8px;
   }
@@ -962,6 +974,70 @@ body {
 
   .mobile-upcoming .schedule-upcoming-list button {
     min-height: 52px;
+  }
+
+  .mobile-reminder-days {
+    display: grid;
+    gap: 22px;
+    padding: 18px 16px 28px;
+  }
+
+  .mobile-reminder-day h2 {
+    margin-bottom: 10px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .mobile-reminder-day ul {
+    display: grid;
+    gap: 8px;
+  }
+
+  .mobile-reminder-card {
+    display: flex;
+    min-height: 68px;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+
+  .mobile-reminder-check,
+  .mobile-reminder-settings {
+    display: grid;
+    width: 40px;
+    height: 44px;
+    flex: none;
+    place-items: center;
+    color: var(--muted);
+  }
+
+  .mobile-reminder-check span {
+    width: 22px;
+    height: 22px;
+    border: 1.5px solid var(--muted);
+    border-radius: 6px;
+  }
+
+  .mobile-reminder-copy {
+    display: grid;
+    min-width: 0;
+    flex: 1;
+    gap: 3px;
+  }
+
+  .mobile-reminder-copy strong {
+    font-size: 15px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  .mobile-reminder-copy time {
+    color: var(--muted);
+    font-size: 13px;
   }
 
   .schedule-mobile-calendar .weekdays div {
@@ -1014,9 +1090,14 @@ body {
   .mobile-nav {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    padding: 0 env(safe-area-inset-right) calc(10px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
     border-top: 1px solid var(--border);
     background: var(--surface);
+  }
+
+  .schedule-app.schedule-keyboard-open .mobile-nav,
+  .schedule-app:has(.mobile-chat-input:focus) .mobile-nav {
+    display: none;
   }
 
   .mobile-nav button {
