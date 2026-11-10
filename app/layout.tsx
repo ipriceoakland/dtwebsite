@@ -15,6 +15,8 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Deltatime",
   description: "Schedule reminders for your week.",
+  manifest: "/manifest.webmanifest",
+  icons: { apple: "/deltatime-icon-192.png" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

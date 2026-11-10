@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
       (process.env.NODE_ENV === "development" ? "http://127.0.0.1:8787" : null);
     if (!backendOrigin) return [];
 
-    return ["/api/auth/:path*", "/api/reminders", "/api/reminders/:id"].map((source) => ({
+    return ["/api/auth/:path*", "/api/reminders", "/api/reminders/:id", "/api/notifications"].map((source) => ({
       source,
       destination: new URL(source, backendOrigin).href,
     }));

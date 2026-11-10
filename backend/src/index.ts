@@ -1,10 +1,20 @@
-import { getSessionUserId, handleAuthRequest, type AuthEnv } from "./auth";
+import { getSessionUserId, handleAuthRequest } from "./auth";
+import { handlePushRequest, type PushEnv } from "./push";
 
 export default {
 	async fetch(request, env): Promise<Response> {
 		const path = new URL(request.url).pathname;
 		if (path.startsWith("/api/auth/")) {
 			return handleAuthRequest(request, env, path);
+		}
+		if (path === "/api/notifications") {
+			try {
+				return await handlePushRequest(request, env);
+			} catch {
+				return Response.json({ error: "Notifications are temporarily unavailable." }, {
+					status: 503, headers: { "Cache-Control": "no-store" },
+				});
+			}
 		}
 			if (path === "/sms/inbound" && request.method === "POST") {
 				if (env.LOCAL_SMS_TEST !== "true") {
@@ -373,4 +383,4 @@ if (reminderMatch) {
 
 		return new Response("Not found", { status: 404 });
 	},
-} satisfies ExportedHandler<AuthEnv & { LOCAL_SMS_TEST?: string }>;
+} satisfies ExportedHandler<PushEnv & { LOCAL_SMS_TEST?: string }>;

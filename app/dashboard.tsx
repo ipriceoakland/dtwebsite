@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Modal } from "./modal";
+import { NotificationSettings } from "./notification-settings";
 import { ReminderForm } from "./reminder-form";
 import { parseReminder } from "./parse-reminder";
 
@@ -760,7 +761,7 @@ export function Dashboard() {
           </ul>
           <section className="mobile-help-home-screen">
             <h3>Keep Delta one tap away</h3>
-            <p>On your iPhone, open Deltatime in Safari. Tap Share (or open the page menu and tap Share), then tap Add to Home Screen and Add.</p>
+            <p>On your iPhone, open Deltatime in Safari. Tap Share, then Add to Home Screen. If you see Open as Web App, leave it on. Open Deltatime from its icon and enable notifications in Profile.</p>
           </section>
           <div className="modal-actions">
             <button type="button" className="button button-primary" onClick={() => setView(null)}>
@@ -909,6 +910,7 @@ export function Dashboard() {
             <dt>Timezone</dt>
             <dd>{timeZone}</dd>
           </dl>
+          {account && "user" in account && account.user && <NotificationSettings />}
           <div className="modal-actions">
             <span className="spacer" />
             {account && "user" in account && (account.user ? (
