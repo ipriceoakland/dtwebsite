@@ -42,6 +42,61 @@ function pushEndpoint(value: unknown): string | null {
   return null;
 }
 
+type WebPushConfig = { publicKey: string; privateKey: string; subject: string };
+type PushKeys = { p256dh: string; auth: string };
+type DeliveryResult = "accepted" | "expired" | "retry" | "failed";
+
+export function getWebPushConfig(env: PushEnv): WebPushConfig | null {
+  const { VAPID_PUBLIC_KEY: publicKey, VAPID_PRIVATE_KEY: privateKey, VAPID_SUBJECT: subject } = env;
+  return publicKey && privateKey && subject ? { publicKey, privateKey, subject } : null;
+}
+
+export async function deliverWebPush(
+  config: WebPushConfig,
+  rawEndpoint: string,
+  keys: PushKeys,
+  notification: { title: string; body: string },
+  options: { ttl: number; topic?: string },
+): Promise<DeliveryResult> {
+  const endpoint = pushEndpoint(rawEndpoint);
+  if (!endpoint) return "failed";
+  let stage = "prepare request";
+  try {
+    const push = generateRequestDetails(
+      { endpoint, keys },
+      JSON.stringify(notification),
+      {
+        TTL: options.ttl,
+        topic: options.topic,
+        urgency: "high",
+        contentEncoding: "aes128gcm",
+        vapidDetails: config,
+      },
+    );
+    const headers = new Headers();
+    for (const [name, value] of Object.entries(push.headers)) {
+      if (name.toLowerCase() !== "content-length") headers.set(name, String(value));
+    }
+    stage = "send request";
+    const result = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: push.body ? Uint8Array.from(push.body) : undefined,
+      redirect: "manual",
+      signal: AbortSignal.timeout(10_000),
+    });
+    // Cleanup must not turn an accepted push into a failed send.
+    await result.body?.cancel().catch(() => {});
+    if (result.status === 404 || result.status === 410) return "expired";
+    if (result.ok) return "accepted";
+    console.warn("[Deltatime push] Push service rejected send:", result.status);
+    return result.status === 408 || result.status === 429 || result.status >= 500 ? "retry" : "failed";
+  } catch (error) {
+    console.warn("[Deltatime push] Send failed at " + stage + ": " + pushFailureReason(error));
+    return "retry";
+  }
+}
+
 export async function handlePushRequest(request: Request, env: PushEnv) {
   if (request.method !== "GET" && request.method !== "POST") {
     return json({ error: "Method not allowed." }, 405);
@@ -53,12 +108,10 @@ export async function handlePushRequest(request: Request, env: PushEnv) {
 
   const userId = await getSessionUserId(request, env.deltatime_dev);
   if (userId === null) return json({ error: "Sign in to manage notifications." }, 401);
-  const { VAPID_PUBLIC_KEY: publicKey, VAPID_PRIVATE_KEY: privateKey, VAPID_SUBJECT: subject } = env;
+  const config = getWebPushConfig(env);
   if (request.method === "GET") {
-    if (!publicKey || !privateKey || !subject) {
-      return json({ error: "Web Push hasn’t been configured yet." }, 503);
-    }
-    return json({ publicKey });
+    if (!config) return json({ error: "Web Push hasn’t been configured yet." }, 503);
+    return json({ publicKey: config.publicKey });
   }
 
   if (!request.headers.get("Content-Type")?.startsWith("application/json")) {
@@ -83,7 +136,7 @@ export async function handlePushRequest(request: Request, env: PushEnv) {
       .bind(endpoint, userId).run();
     return json({ ok: true });
   }
-  if (!publicKey || !privateKey || !subject) {
+  if (!config) {
     return json({ error: "Web Push hasn’t been configured yet." }, 503);
   }
 
@@ -118,37 +171,14 @@ export async function handlePushRequest(request: Request, env: PushEnv) {
   `).bind(userId, now, now - 30).first();
   if (!allowed) return json({ error: "Wait 30 seconds between test notifications." }, 429);
 
-  let stage = "prepare request";
-  try {
-    const push = generateRequestDetails(
-      { endpoint, keys: subscription },
-      JSON.stringify({ title: "Deltatime", body: "Test notification from Deltatime." }),
-      { TTL: 60, urgency: "high", contentEncoding: "aes128gcm", vapidDetails: { publicKey, privateKey, subject } },
-    );
-    const headers = new Headers();
-    for (const [name, value] of Object.entries(push.headers)) {
-      if (name.toLowerCase() !== "content-length") headers.set(name, String(value));
-    }
-    stage = "send request";
-    const result = await fetch(endpoint, {
-      method: "POST",
-      headers,
-      body: push.body ? Uint8Array.from(push.body) : undefined,
-      redirect: "manual",
-      signal: AbortSignal.timeout(10_000),
-    });
-    // Cleanup must not turn an accepted push into a failed send.
-    await result.body?.cancel().catch(() => {});
-    stage = "handle response";
-    if (result.status === 404 || result.status === 410) {
-      await db.prepare("DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?")
-        .bind(endpoint, userId).run();
-      return json({ error: "This device’s subscription expired. Disable and re-enable notifications." }, 410);
-    }
-    if (result.ok) return json({ ok: true }, 202);
-    console.warn("[Deltatime push] Push service rejected test:", result.status);
-  } catch (error) {
-    console.warn("[Deltatime push] Test failed at " + stage + ": " + pushFailureReason(error));
+  const result = await deliverWebPush(config, endpoint, subscription, {
+    title: "Deltatime", body: "Test notification from Deltatime.",
+  }, { ttl: 60 });
+  if (result === "expired") {
+    await db.prepare("DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?")
+      .bind(endpoint, userId).run();
+    return json({ error: "This device’s subscription expired. Disable and re-enable notifications." }, 410);
   }
+  if (result === "accepted") return json({ ok: true }, 202);
   return json({ error: "Couldn’t send the test notification. Try again in 30 seconds." }, 502);
 }

@@ -17,6 +17,7 @@
 	"env": {
 		"demo": {
 			"workers_dev": true,
+			"triggers": { "crons": ["* * * * *"] },
 			"d1_databases": [
 				{
 					"binding": "deltatime_dev",

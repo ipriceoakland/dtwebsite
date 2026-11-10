@@ -1,7 +1,12 @@
 import { getSessionUserId, handleAuthRequest } from "./auth";
 import { handlePushRequest, type PushEnv } from "./push";
+import { runScheduledPush } from "./scheduled-push";
 
 export default {
+	async scheduled(_controller, env): Promise<void> {
+		await runScheduledPush(env);
+	},
+
 	async fetch(request, env): Promise<Response> {
 		const path = new URL(request.url).pathname;
 		if (path.startsWith("/api/auth/")) {
