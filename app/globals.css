@@ -341,7 +341,7 @@ body {
   align-self: center;
 }
 
-@media (min-width: 641px) and (max-width: 960px) {
+@media (min-width: 768px) and (max-width: 960px) {
   .schedule-layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -742,79 +742,339 @@ body {
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
 }
 
-.scroll-hint {
+.mobile-chat,
+.mobile-upcoming,
+.mobile-nav,
+.schedule-mobile-brand,
+.schedule-profile-label,
+.mobile-sign-in {
   display: none;
 }
 
-/* Mobile: day boxes show a count, windows become full screens. */
-
-@media (max-width: 640px) {
-  .topbar-inner {
-    padding: 0 16px;
+@media (max-width: 767px) {
+  body:has(.schedule-app) {
+    background: #0a0a0b;
   }
 
-  .page {
-    padding: 24px 16px 48px;
+  .schedule-app {
+    --background: #0a0a0b;
+    --foreground: #ededef;
+    --surface: #141416;
+    --muted: #a1a1aa;
+    --border: #27272a;
+    --subtle: #1c1c1f;
+    --accent: #60a5fa;
+    --accent-soft: #172036;
+    --danger: #f87171;
+    --success: #4ade80;
+    --warning: #fbbf24;
+
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    height: 100dvh;
+    height: var(--schedule-viewport-height, 100dvh);
+    overflow: hidden;
+    background: var(--background);
+    color: var(--foreground);
+    color-scheme: dark;
   }
 
-  .schedule-layout,
-  .schedule-account {
+  .schedule-app .topbar-inner {
+    height: 55px;
+    padding-inline: 16px;
+  }
+
+  .schedule-app .schedule-desktop-brand,
+  .schedule-layout {
     display: none;
   }
 
-  .schedule-mobile-calendar {
-    display: block;
+  .schedule-app .schedule-mobile-brand {
+    display: flex;
+    margin-left: 0;
+    padding: 0;
+    cursor: default;
   }
 
-  .weekdays div {
+  .schedule-app .schedule-mobile-brand:hover {
+    background: transparent;
+  }
+
+  .schedule-account {
+    display: inline-flex;
+    width: auto;
+    min-height: 44px;
+    align-items: center;
+    gap: 6px;
+    padding: 0 4px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    font-size: 14px;
+  }
+
+  .schedule-profile-label {
+    display: inline;
+  }
+
+  .schedule-app .schedule-account-signed-out,
+  .schedule-sign-in-notice {
+    display: none;
+  }
+
+  .mobile-sign-in {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    padding-inline: 6px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .schedule-page {
+    display: flex;
+    width: 100%;
+    min-height: 0;
+    flex-direction: column;
+    padding: 0;
+  }
+
+  .schedule-page > p {
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+
+  .mobile-view-header {
+    display: flex;
+    min-height: 52px;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .mobile-view-header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+
+  .mobile-help-button {
+    display: grid;
+    width: 44px;
+    height: 44px;
+    place-items: center;
+    color: var(--muted);
+  }
+
+  .mobile-help-button span {
+    display: grid;
+    width: 22px;
+    height: 22px;
+    place-items: center;
+    border: 1px solid var(--muted);
+    border-radius: 50%;
+    font-size: 13px;
+  }
+
+  .mobile-chat:not([hidden]) {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .mobile-chat-log {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+
+  .mobile-chat-log > .schedule-chat-exchange:first-child {
+    margin-top: auto;
+  }
+
+  .mobile-chat-log .schedule-message-user {
+    background: #e9e9e9;
+    color: #171717;
+  }
+
+  .mobile-chat-composer {
+    flex: none;
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .mobile-chat-controls {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  .mobile-chat-controls .mobile-chat-input {
+    min-width: 0;
+    height: 44px;
+    flex: 1;
+    padding: 10px 12px;
+    resize: none;
+    font-size: 16px;
+    line-height: 22px;
+  }
+
+  .mobile-chat-composer .field-error {
+    margin: 0 0 8px;
+  }
+
+  .mobile-chat-controls .mobile-send {
+    min-width: 60px;
+    height: 44px;
+    padding-inline: 10px;
+  }
+
+  .mobile-send:disabled {
+    opacity: 0.45;
+  }
+
+  .mobile-upcoming:not([hidden]),
+  .schedule-mobile-calendar:not([hidden]) {
+    display: block;
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+
+  .mobile-upcoming > .schedule-empty {
+    padding: 16px;
+  }
+
+  .mobile-upcoming .schedule-upcoming-list,
+  .schedule-mobile-calendar .schedule-months {
+    padding: 16px;
+  }
+
+  .mobile-upcoming .schedule-upcoming-list button {
+    min-height: 52px;
+  }
+
+  .schedule-mobile-calendar .weekdays div {
     padding: 8px 0;
     font-size: 11px;
     text-align: center;
   }
 
-  .day {
+  .schedule-mobile-calendar .day {
     align-items: center;
     gap: 4px;
     min-height: 76px;
     padding: 6px 2px;
   }
 
-  .day-head {
-    flex-direction: column;
+  .schedule-mobile-calendar .day-head {
     height: auto;
+    flex-direction: column;
     gap: 2px;
   }
 
-  .day-date {
+  .schedule-mobile-calendar .day-date {
     font-size: 12px;
     white-space: nowrap;
   }
 
-  .add-button {
+  .schedule-mobile-calendar .add-button {
     width: 24px;
     height: 24px;
     font-size: 16px;
   }
 
-  .day-reminders {
+  .schedule-mobile-calendar .day-reminders {
     display: none;
   }
 
-  .day-count {
+  .schedule-mobile-calendar .day-count {
     display: grid;
-    place-items: center;
     min-width: 24px;
     height: 20px;
+    place-items: center;
     padding: 0 6px;
     border-radius: 10px;
-    background: var(--accent);
-    color: #fff;
+    background: var(--foreground);
+    color: var(--background);
     font-size: 12px;
     font-weight: 600;
-    cursor: pointer;
   }
 
-  .modal:not(.modal-small) {
+  .mobile-nav {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .mobile-nav button {
+    display: grid;
+    min-height: 56px;
+    align-content: center;
+    justify-items: center;
+    gap: 3px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .mobile-nav button[aria-current="page"] {
+    color: var(--foreground);
+    font-weight: 650;
+  }
+
+  .mobile-nav button:focus-visible,
+  .mobile-help-button:focus-visible,
+  .schedule-account:focus-visible,
+  .mobile-sign-in:focus-visible,
+  .mobile-upcoming button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  .mobile-help-intro {
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .mobile-help-examples {
+    display: grid;
+    gap: 10px;
+    margin-top: 12px;
+    padding-left: 20px;
+    list-style: disc;
+    font-size: 14px;
+  }
+
+  .mobile-help-home-screen {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    font-size: 14px;
+  }
+
+  .mobile-help-home-screen h3 {
+    margin-bottom: 5px;
+    font-weight: 600;
+  }
+
+  .mobile-help-home-screen p {
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .schedule-app .modal:not(.modal-small) {
     width: 100%;
     max-width: none;
     height: 100%;
@@ -823,100 +1083,14 @@ body {
     border-radius: 0;
   }
 
-  .modal:not(.modal-small) .modal-body {
+  .schedule-app .modal:not(.modal-small) .modal-body {
     padding: 20px 16px;
   }
 
-  /* Fade at the bottom of the screen hints that it scrolls. */
-  .scroll-hint {
-    position: fixed;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    display: block;
-    height: 32px;
-    background: linear-gradient(transparent, var(--background));
-    pointer-events: none;
+  .schedule-app .toast {
+    bottom: calc(68px + env(safe-area-inset-bottom));
+    width: max-content;
+    max-width: calc(100% - 32px);
+    text-align: center;
   }
 }
-
-/* Phone quick-add view. The existing calendar stays available as the second tab. */
-.mobile-home, .mobile-calendar-heading, .mobile-nav { display: none; }
-
-@media (max-width: 640px) {
-  body:has(.mobile-home) { background: #09090b; color: #f7f7f8; }
-  .topbar { background: #09090b; border-color: #303035; }
-  .topbar-inner { height: 62px; padding: 0 22px; }
-  .brand { color: #f7f7f8; }
-  .brand-mark { background: #f7f7f8; color: #09090b; }
-  .page { padding: 30px 22px calc(112px + env(safe-area-inset-bottom)); }
-  .mobile-home, .mobile-calendar-heading { display: block; }
-  .mobile-home[hidden], .mobile-calendar-heading[hidden], .mobile-calendar-hidden { display: none; }
-  .mobile-eyebrow { color: #9999a3; font-size: 10px; font-weight: 700; letter-spacing: .19em; }
-  .mobile-title { margin-top: 15px; font-size: clamp(34px, 9vw, 46px); font-weight: 650; letter-spacing: -.055em; line-height: 1.05; }
-  .mobile-intro { margin-top: 14px; color: #a3a3aa; font-size: 15px; }
-  .mobile-composer {
-    margin-top: 36px; padding: 18px; border: 1px solid #414147; border-radius: 20px;
-    background: linear-gradient(150deg, #1b1b1e, #111113);
-    box-shadow: 0 18px 40px rgb(0 0 0 / .24), inset 0 1px rgb(255 255 255 / .06);
-  }
-  .mobile-label { display: block; color: #aaaab2; font-size: 11px; font-weight: 650; letter-spacing: .13em; text-transform: uppercase; }
-  .mobile-composer textarea {
-    display: block; width: 100%; min-height: 110px; margin-top: 16px; resize: vertical;
-    border: 0; outline: 0; background: transparent; color: #fff; font: inherit;
-    font-size: 21px; letter-spacing: -.025em; line-height: 1.4;
-  }
-  .mobile-composer textarea::placeholder { color: #81818a; }
-  .mobile-composer textarea:focus-visible { outline: 2px solid #aaa; outline-offset: 5px; border-radius: 3px; }
-  .mobile-composer textarea[aria-invalid="true"] { color: #ffd2d2; }
-  .mobile-error { margin: 0 0 14px; color: #ff9f9f; font-size: 13px; line-height: 1.4; }
-  .mobile-preview { display: flex; flex-wrap: wrap; gap: 5px 8px; padding: 12px 0 15px; border-top: 1px solid #333338; color: #a5a5ae; font-size: 12px; }
-  .mobile-preview strong { color: #f4f4f5; font-weight: 600; }
-  .mobile-preview span:last-child { flex-basis: 100%; }
-  .mobile-composer-bottom { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 13px; border-top: 1px solid #333338; }
-  .mobile-composer-bottom > span { color: #92929b; font-size: 11px; line-height: 1.35; }
-  .mobile-composer-bottom button { flex: none; min-width: 94px; height: 44px; border-radius: 11px; background: #f6f6f7; color: #111113; font-size: 14px; font-weight: 650; }
-  .mobile-composer-bottom button:disabled { opacity: .45; }
-  .mobile-examples { margin-top: 24px; }
-  .mobile-examples > span { color: #8d8d97; font-size: 10px; font-weight: 650; letter-spacing: .15em; }
-  .mobile-examples > div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-  .mobile-examples button { min-height: 38px; padding: 0 13px; border: 1px solid #3b3b41; border-radius: 999px; background: #171719; color: #e4e4e7; font-size: 12px; }
-  .mobile-saved { display: flex; align-items: flex-start; gap: 12px; margin-top: 26px; padding: 15px; border: 1px solid #45454b; border-radius: 14px; background: #19191c; }
-  .mobile-saved-icon { display: grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 50%; background: #f5f5f6; color: #111; font-size: 15px; }
-  .mobile-saved strong { font-size: 14px; }
-  .mobile-saved p { margin-top: 4px; color: #aaaab1; font-size: 12px; line-height: 1.5; }
-  .mobile-upcoming { margin-top: 45px; }
-  .mobile-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .mobile-section-head h2 { font-size: 19px; font-weight: 600; letter-spacing: -.025em; }
-  .mobile-section-head button { color: #c1c1c8; font-size: 12px; }
-  .mobile-upcoming ul { margin-top: 14px; list-style: none; }
-  .mobile-upcoming li { border-top: 1px solid #303035; }
-  .mobile-upcoming li button { position: relative; display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 15px 28px 16px 1px; text-align: left; }
-  .mobile-upcoming-date { color: #a2a2aa; font-size: 12px; }
-  .mobile-upcoming-date span { padding: 0 3px; }
-  .mobile-upcoming li strong { font-size: 15px; font-weight: 500; }
-  .mobile-upcoming-arrow { position: absolute; top: 23px; right: 3px; color: #aaa; }
-  .mobile-empty { margin-top: 14px; padding: 22px; border: 1px solid #303035; border-radius: 14px; color: #a3a3aa; font-size: 13px; line-height: 1.5; }
-  .mobile-calendar-heading { margin-bottom: 25px; }
-  .calendar { border-color: #303035; background: #171719; }
-  .weekdays { border-color: #303035; background: #171719; color: #aaaab2; }
-  .days { background: #303035; }
-  .day { background: #171719; }
-  .day-past { background: #101012; }
-  .day-today .day-date, .day-count { background: #f4f4f5; color: #111; }
-  .mobile-nav {
-    position: fixed; right: 0; bottom: 0; left: 0; z-index: 5; display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    padding: 8px max(12px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
-    border-top: 1px solid #333338; background: #141416;
-  }
-  .mobile-nav button { display: grid; justify-items: center; gap: 3px; min-height: 49px; color: #96969e; font-size: 11px; }
-  .mobile-nav button span { font-size: 20px; line-height: 25px; }
-  .mobile-nav button[aria-current="page"] { color: #fff; }
-  .mobile-composer-bottom button:focus-visible, .mobile-examples button:focus-visible,
-  .mobile-nav button:focus-visible, .mobile-upcoming button:focus-visible,
-  .mobile-section-head button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
-  .scroll-hint { height: 78px; background: linear-gradient(transparent, #09090b); }
-  .toast { bottom: calc(84px + env(safe-area-inset-bottom)); width: max-content; max-width: calc(100% - 32px); text-align: center; }
-}
-

@@ -28,9 +28,18 @@ type View =
   | { kind: "reminder"; id: number }
   | { kind: "day"; day: number }
   | { kind: "form"; day: number; id?: number }
-  | { kind: "account" };
+  | { kind: "account" }
+  | { kind: "help" };
 
 type Account = { user: { display_name: string | null } | null } | { error: true };
+
+const signInDraftKey = "deltatime.sign-in-draft";
+
+const mobileTabs = [
+  { id: "upcoming", label: "Upcoming", icon: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Zm0-15v5l3 2" },
+  { id: "chat", label: "Chat", icon: "M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l1.6-3.2A8.5 8.5 0 1 1 21 11.5Z" },
+  { id: "calendar", label: "Calendar", icon: "M7 3v4m10-4v4M4 10h16M5 5h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" },
+] as const;
 
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const statusLabels = {
@@ -89,9 +98,10 @@ export function Dashboard() {
   const [monthOffset, setMonthOffset] = useState(0);
   const [chat, setChat] = useState<ChatExchange[]>([]);
   const chatLogRef = useRef<HTMLDivElement>(null);
+  const mobileChatLogRef = useRef<HTMLDivElement>(null);
+  const appRef = useRef<HTMLDivElement>(null);
   const [prompt, setPrompt] = useState("");
-  const [mobileTab, setMobileTab] = useState<"home" | "calendar">("home");
-  const [lastSaved, setLastSaved] = useState<Reminder | null>(null);
+  const [mobileTab, setMobileTab] = useState<(typeof mobileTabs)[number]["id"]>("chat");
   const [promptError, setPromptError] = useState("");
   const [formError, setFormError] = useState("");
   const [toast, setToast] = useState("");
@@ -137,9 +147,57 @@ export function Dashboard() {
   }, [loadAttempt]);
 
   useEffect(() => {
-    const log = chatLogRef.current;
-    if (log) log.scrollTop = log.scrollHeight;
-  }, [chat]);
+    for (const log of [chatLogRef.current, mobileChatLogRef.current]) {
+      if (log) log.scrollTop = log.scrollHeight;
+    }
+  }, [chat, mobileTab]);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const app = appRef.current;
+    if (!viewport || !app) return;
+
+    function syncHeight() {
+      if (viewport && app && viewport.scale === 1) {
+        app.style.setProperty("--schedule-viewport-height", `${viewport.height}px`);
+      }
+    }
+
+    syncHeight();
+    viewport.addEventListener("resize", syncHeight);
+    return () => viewport.removeEventListener("resize", syncHeight);
+  }, []);
+
+  useEffect(() => {
+    try {
+      const draft = sessionStorage.getItem(signInDraftKey);
+      if (draft) {
+        setPrompt(draft);
+        sessionStorage.removeItem(signInDraftKey);
+      }
+    } catch {
+      // Some browser settings block session storage.
+    }
+  }, []);
+
+  function rememberDraftForSignIn() {
+    if (!prompt.trim()) return;
+    try {
+      sessionStorage.setItem(signInDraftKey, prompt);
+    } catch {
+      // Sign-in still works if session storage is unavailable.
+    }
+  }
+
+  function submitMobileChat() {
+    if (!prompt.trim() || savingRef.current) return;
+    if (loadState === "signed-out") {
+      rememberDraftForSignIn();
+      window.location.assign("/api/auth/google");
+      return;
+    }
+    if (loadState === "ready") submitPrompt();
+  }
 
   async function openAccount() {
     setView({ kind: "account" });
@@ -202,7 +260,6 @@ export function Dashboard() {
           previous.map((reminder) => reminder.id === id ? saved : reminder));
         if (source === "prompt") {
           setPrompt("");
-          setLastSaved(saved);
           if (change.chatText) {
             const text = change.chatText;
             setChat((previous) => [...previous, { id: saved.id, text, remindAt: saved.remindAt }]);
@@ -223,7 +280,7 @@ export function Dashboard() {
     }
   }
 
-  function submitPrompt(fromChat = false) {
+  function submitPrompt() {
     const text = prompt.trim();
     if (!text) return;
 
@@ -240,7 +297,7 @@ export function Dashboard() {
       kind: "save",
       body: result.body,
       remindAt: result.remindAt,
-      chatText: fromChat ? text : undefined,
+      chatText: text,
     }, "prompt");
   }
 
@@ -262,7 +319,6 @@ export function Dashboard() {
       ? reminders.find((r) => r.id === view.id)
       : undefined;
 
-  const promptPreview = prompt.trim() ? parseReminder(prompt) : null;
   const upcoming = [...reminders]
     .filter((reminder) => reminder.status === "pending" && reminder.remindAt > Date.now())
     .sort((a, b) => a.remindAt - b.remindAt);
@@ -347,13 +403,49 @@ export function Dashboard() {
     );
   }
 
+  function renderMessages() {
+    return chat.map(({ id, text, remindAt }) => (
+      <div className="schedule-chat-exchange" key={id}>
+        <p className="schedule-message schedule-message-user">{text}</p>
+        <p className="schedule-message">
+          Added to your calendar for {longDateFormat.format(remindAt)} at {timeFormat.format(remindAt)}.
+        </p>
+      </div>
+    ));
+  }
+
+  function renderUpcoming() {
+    if (upcoming.length === 0) {
+      return (
+        <p className="schedule-empty">
+          {loadState === "ready" ? "No upcoming reminders yet." : "Your upcoming reminders will appear here."}
+        </p>
+      );
+    }
+
+    return (
+      <ul className="schedule-upcoming-list">
+        {upcoming.map((reminder) => (
+          <li key={reminder.id}>
+            <button type="button" onClick={() => setView({ kind: "reminder", id: reminder.id })}>
+              <strong>{reminder.body}</strong>
+              <time dateTime={new Date(reminder.remindAt).toISOString()}>
+                {monthDayFormat.format(reminder.remindAt)} · {timeFormat.format(reminder.remindAt)}
+              </time>
+            </button>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
   return (
-    <div>
+    <div className="schedule-app" ref={appRef}>
       <header className="topbar">
         <div className="topbar-inner schedule-topbar-inner">
           <button
             type="button"
-            className="brand"
+            className="brand schedule-desktop-brand"
             aria-label="Account"
             onClick={openAccount}
           >
@@ -362,12 +454,22 @@ export function Dashboard() {
             </span>
             <span className="brand-name">Deltatime</span>
           </button>
-          <button type="button" className="schedule-account" aria-label="Open account" onClick={openAccount}>
+          <span className="brand schedule-mobile-brand">
+            <span className="brand-mark" aria-hidden="true">𝚫t</span>
+            <span className="brand-name">Deltatime</span>
+          </span>
+          <button type="button" className={loadState === "signed-out" ? "schedule-account schedule-account-signed-out" : "schedule-account"} aria-label="Open profile" onClick={openAccount}>
             <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
               <circle cx="12" cy="8" r="3" />
               <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
             </svg>
+            <span className="schedule-profile-label">Profile</span>
           </button>
+          {loadState === "signed-out" && (
+            <a href="/api/auth/google" className="mobile-sign-in" onClick={rememberDraftForSignIn}>
+              Sign in
+            </a>
+          )}
         </div>
       </header>
 
@@ -375,78 +477,9 @@ export function Dashboard() {
         {signInFailed && (
           <p className="field-error" role="alert">Google sign-in couldn’t be completed. Open Account to try again.</p>
         )}
-        {loadState !== "loading" && (
-          <section className="mobile-home" aria-label="Quick reminders" hidden={mobileTab !== "home"}>
-            <p className="mobile-eyebrow">YOUR SPACE, YOUR TIME</p>
-            <h1 className="mobile-title">What do you need<br />to remember?</h1>
-            <p className="mobile-intro">Write it the way you’d text it.</p>
-
-            <form className="mobile-composer" onSubmit={(event) => { event.preventDefault(); if (loadState === "ready") submitPrompt(); else void openAccount(); }}>
-              <label htmlFor="mobile-reminder" className="mobile-label">New reminder</label>
-              <textarea
-                id="mobile-reminder"
-                rows={3}
-                placeholder="Remind me Friday at 4pm to send the draft"
-                value={prompt}
-                disabled={saving}
-                aria-invalid={!!promptError}
-                onChange={(event) => { setPrompt(event.target.value); setPromptError(""); }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault(); if (loadState === "ready") submitPrompt(); else void openAccount();
-                  }
-                }}
-              />
-              {promptError && <p className="mobile-error" role="alert">{promptError}</p>}
-              {promptPreview?.ok && (
-                <p className="mobile-preview" aria-live="polite">
-                  <span>Will remind you</span>
-                  <strong>{longDateFormat.format(promptPreview.remindAt)} · {timeFormat.format(promptPreview.remindAt)}</strong>
-                  <span>{promptPreview.body}</span>
-                </p>
-              )}
-              <div className="mobile-composer-bottom">
-                <span>Try a time like “tomorrow at 9”</span>
-                <button type="submit" disabled={!prompt.trim() || saving}>
-                  {saving ? "Saving…" : loadState === "ready" ? "Send" : "Sign in"}<span aria-hidden="true"> ↗</span>
-                </button>
-              </div>
-            </form>
-
-            <div className="mobile-examples" aria-label="Example reminders">
-              <span>TRY AN EXAMPLE</span>
-              <div>
-                <button type="button" onClick={() => { setPrompt("Remind me in 20 minutes to study"); setPromptError(""); }}>Study in 20 minutes</button>
-                <button type="button" onClick={() => { setPrompt("Remind me tomorrow at 9am to call Mom"); setPromptError(""); }}>Call Mom tomorrow</button>
-              </div>
-            </div>
-
-            {lastSaved && (
-              <div className="mobile-saved" role="status">
-                <span className="mobile-saved-icon" aria-hidden="true">✓</span>
-                <div><strong>Reminder saved</strong><p>{lastSaved.body} · {longDateFormat.format(lastSaved.remindAt)} at {timeFormat.format(lastSaved.remindAt)}</p></div>
-              </div>
-            )}
-
-            {loadState === "ready" && <section className="mobile-upcoming" aria-label="Upcoming reminders">
-              <div className="mobile-section-head"><h2>Coming up</h2><button type="button" onClick={() => setMobileTab("calendar")}>View calendar <span aria-hidden="true">↗</span></button></div>
-              {upcoming.length ? (
-                <ul>{upcoming.slice(0, 4).map((reminder) => (
-                  <li key={reminder.id}><button type="button" onClick={() => setView({ kind: "reminder", id: reminder.id })}>
-                    <span className="mobile-upcoming-date">{monthDayFormat.format(reminder.remindAt)} <span>·</span> {timeFormat.format(reminder.remindAt)}</span>
-                    <strong>{reminder.body}</strong><span className="mobile-upcoming-arrow" aria-hidden="true">↗</span>
-                  </button></li>
-                ))}</ul>
-              ) : <p className="mobile-empty">Nothing coming up yet. Your next reminder starts here.</p>}
-            </section>}
-          </section>
-        )}
-        <div className="mobile-calendar-heading" hidden={mobileTab !== "calendar"}>
-          <p className="mobile-eyebrow">YOUR REMINDERS</p><h1 className="mobile-title">Calendar</h1>
-        </div>
         {loadState === "loading" && <p role="status">Loading reminders…</p>}
         {loadState === "signed-out" && (
-          <p>Sign in to see and save reminders.{" "}
+          <p className="schedule-sign-in-notice">Sign in to see and save reminders.{" "}
             <button type="button" className="button" onClick={openAccount}>Open Account</button>
           </p>
         )}
@@ -459,7 +492,74 @@ export function Dashboard() {
           </p>
         )}
 
-        <div className={`schedule-mobile-calendar${mobileTab === "home" ? " mobile-calendar-hidden" : ""}`}>
+        <section className="mobile-chat" hidden={mobileTab !== "chat"} aria-labelledby="mobile-chat-title">
+          <div className="mobile-view-header">
+            <h1 id="mobile-chat-title">Text Delta</h1>
+            <button
+              type="button"
+              className="mobile-help-button"
+              aria-label="How to use Text Delta"
+              onClick={() => setView({ kind: "help" })}
+            >
+              <span aria-hidden="true">?</span>
+            </button>
+          </div>
+          <div className="mobile-chat-log" role="log" aria-label="Reminder conversation" ref={mobileChatLogRef}>
+            {chat.length === 0 && loadState === "ready" && (
+              <p className="schedule-empty">Send a message to set a reminder.</p>
+            )}
+            {renderMessages()}
+          </div>
+          <form
+            className="mobile-chat-composer"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitMobileChat();
+            }}
+          >
+            {promptError && <p id="mobile-chat-error" className="field-error" role="alert">{promptError}</p>}
+            <div className="mobile-chat-controls">
+              <textarea
+                className="input mobile-chat-input"
+                rows={1}
+                placeholder="Write a reminder…"
+                aria-label="Write a reminder"
+                aria-invalid={!!promptError}
+                aria-describedby={promptError ? "mobile-chat-error" : undefined}
+                enterKeyHint="send"
+                value={prompt}
+                readOnly={saving}
+                onChange={(event) => {
+                  setPrompt(event.target.value);
+                  setPromptError("");
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
+                  }
+                }}
+              />
+              <button
+                type="submit"
+                className="button button-primary mobile-send"
+                disabled={(loadState !== "ready" && loadState !== "signed-out") || saving || !prompt.trim()}
+              >
+                {saving ? "Sending…" : "Send"}
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section className="mobile-upcoming" hidden={mobileTab !== "upcoming"} aria-labelledby="mobile-upcoming-title">
+          <div className="mobile-view-header">
+            <h1 id="mobile-upcoming-title">Upcoming</h1>
+          </div>
+          {renderUpcoming()}
+        </section>
+
+        <div className="schedule-mobile-calendar" hidden={mobileTab !== "calendar"}>
+          <div className="mobile-view-header"><h1>Calendar</h1></div>
           <section className="schedule-months" aria-label="Calendar">
             {mobileMonths.map(({ first, cells }) => (
               <section className="schedule-month" key={first.getTime()}>
@@ -521,20 +621,13 @@ export function Dashboard() {
                 {chat.length === 0 && (
                   <p className="schedule-empty">Try “Remind me Friday at 4 PM to send the draft.”</p>
                 )}
-                {chat.map(({ id, text, remindAt }) => (
-                  <div className="schedule-chat-exchange" key={id}>
-                    <p className="schedule-message schedule-message-user">{text}</p>
-                    <p className="schedule-message">
-                      Added to your calendar for {longDateFormat.format(remindAt)} at {timeFormat.format(remindAt)}.
-                    </p>
-                  </div>
-                ))}
+                {renderMessages()}
               </div>
               <form
                 className="schedule-composer"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  submitPrompt(true);
+                  submitPrompt();
                 }}
               >
                 {promptError && <p className="field-error" role="alert">{promptError}</p>}
@@ -575,38 +668,47 @@ export function Dashboard() {
 
             <section className="schedule-card schedule-upcoming" aria-labelledby="schedule-upcoming-title">
               <h2 id="schedule-upcoming-title" className="schedule-title">Upcoming reminders</h2>
-              {upcoming.length ? (
-                <ul className="schedule-upcoming-list">
-                  {upcoming.map((reminder) => (
-                    <li key={reminder.id}>
-                      <button type="button" onClick={() => setView({ kind: "reminder", id: reminder.id })}>
-                        <strong>{reminder.body}</strong>
-                        <time dateTime={new Date(reminder.remindAt).toISOString()}>
-                          {monthDayFormat.format(reminder.remindAt)} · {timeFormat.format(reminder.remindAt)}
-                        </time>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="schedule-empty">
-                  {loadState === "ready" ? "No upcoming reminders yet." : "Your upcoming reminders will appear here."}
-                </p>
-              )}
+              {renderUpcoming()}
             </section>
           </div>
         </div>
       </main>
 
-      {loadState !== "loading" && (
-        <nav className="mobile-nav" aria-label="Main navigation">
-          <button type="button" aria-current={mobileTab === "home" ? "page" : undefined} onClick={() => { setMobileTab("home"); window.scrollTo(0, 0); }}><span aria-hidden="true">✦</span> Reminders</button>
-          <button type="button" aria-current={mobileTab === "calendar" ? "page" : undefined} onClick={() => { setMobileTab("calendar"); window.scrollTo(0, 0); }}><span aria-hidden="true">▦</span> Calendar</button>
-          <button type="button" onClick={openAccount}><span aria-hidden="true">◯</span> Account</button>
-        </nav>
-      )}
+      <nav className="mobile-nav" aria-label="Main navigation">
+        {mobileTabs.map(({ id, label, icon }) => (
+          <button
+            key={id}
+            type="button"
+            aria-current={mobileTab === id ? "page" : undefined}
+            onClick={() => setMobileTab(id)}
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <path d={icon} />
+            </svg>
+            {label}
+          </button>
+        ))}
+      </nav>
 
-      <div className="scroll-hint" aria-hidden="true" />
+      {view?.kind === "help" && (
+        <Modal title="Text Delta" small onClose={() => setView(null)}>
+          <p className="mobile-help-intro">Tell Delta what to remember and when. For example:</p>
+          <ul className="mobile-help-examples">
+            <li>Remind me in 20 minutes to study.</li>
+            <li>Remind me tomorrow at 9 AM to call Mom.</li>
+            <li>Remind me Friday at 4 PM to send the draft.</li>
+          </ul>
+          <section className="mobile-help-home-screen">
+            <h3>Keep Delta one tap away</h3>
+            <p>On your iPhone, open Deltatime in Safari. Tap Share (or open the page menu and tap Share), then tap Add to Home Screen and Add.</p>
+          </section>
+          <div className="modal-actions">
+            <button type="button" className="button button-primary" onClick={() => setView(null)}>
+              Done
+            </button>
+          </div>
+        </Modal>
+      )}
 
       {/* Window B (desktop): one reminder. */}
       {view?.kind === "reminder" && openReminder && (
