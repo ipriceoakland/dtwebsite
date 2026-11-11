@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import { Modal } from "./modal";
 import { NotificationSettings } from "./notification-settings";
 import { ReminderForm } from "./reminder-form";
@@ -84,6 +84,63 @@ function getMonth(anchor: Date, offset: number) {
       : null;
   });
   return { first, cells };
+}
+function ScrollableReminders({ children }: { children: ReactNode }) {
+  const listRef = useRef<HTMLUListElement>(null);
+  const [hasMoreBelow, setHasMoreBelow] = useState(false);
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+
+    function checkOverflow() {
+      if (!list) return;
+      setHasMoreBelow(list.scrollHeight - list.scrollTop - list.clientHeight > 1);
+
+      const top = list.getBoundingClientRect().top + list.clientTop;
+      const bottom = top + list.clientHeight;
+      const visibility = Array.from(list.children, (child) => {
+        const bounds = child.getBoundingClientRect();
+        return {
+          child,
+          visible: bounds.height > 0 && bounds.top >= top && bounds.bottom <= bottom,
+        };
+      });
+      // Keep hidden items in the layout so they can still be scrolled into view.
+      for (const { child, visible } of visibility) {
+        child.setAttribute("data-fully-visible", String(visible));
+      }
+    }
+
+    // Watch both the viewport and the reminders, including font/layout changes.
+    const observer = new ResizeObserver(checkOverflow);
+    observer.observe(list);
+    for (const child of list.children) observer.observe(child);
+    list.addEventListener("scroll", checkOverflow, { passive: true });
+    const frame = requestAnimationFrame(checkOverflow);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      list.removeEventListener("scroll", checkOverflow);
+    };
+  }, [children]);
+
+  return (
+    <div className="day-reminders-panel">
+      <ul ref={listRef} className="day-reminders" tabIndex={0} aria-label="Day reminders">
+        {children}
+      </ul>
+      {/* Reserve this space so toggling the indicator cannot change overflow. */}
+      <span
+        className="day-overflow-indicator"
+        style={{ visibility: hasMoreBelow ? "visible" : "hidden" }}
+        aria-hidden="true"
+      >
+        …
+      </span>
+    </div>
+  );
 }
 
 export function Dashboard() {
@@ -339,6 +396,66 @@ export function Dashboard() {
     upcomingByDay.set(day, [...(upcomingByDay.get(day) ?? []), reminder]);
   }
 
+  function startResize(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!event.isPrimary || event.button !== 0) return;
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function resize(event: ReactPointerEvent<HTMLDivElement>) {
+    const divider  = event.currentTarget;
+    if (!divider.hasPointerCapture(event.pointerId)) return;
+
+    const layout = divider.parentElement;
+    if (!layout) return;
+
+    const bounds = layout.getBoundingClientRect();
+    const minWidth = 260;
+    const maxWidth = bounds.width - 360 - 8;
+
+    if (maxWidth < minWidth) return;
+
+    const width = Math.max(minWidth, Math.min(maxWidth, bounds.right - event.clientX - 4));
+
+    layout.style.setProperty("--sidebar-width", `${width}px`);
+  }
+
+  function startVerticalResize(event : ReactPointerEvent<HTMLDivElement>) {
+    if (!event.isPrimary || event.button !== 0) return;
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+  
+  function resizeChatHeight(event: ReactPointerEvent<HTMLDivElement>) {
+    const divider  = event.currentTarget;
+    if (!divider.hasPointerCapture(event.pointerId)) return;
+
+    const sidebar = divider.parentElement;
+    if (!sidebar) return;
+
+    const bounds = sidebar.getBoundingClientRect();
+    const gap = Number.parseFloat(getComputedStyle(sidebar).rowGap) || 0;
+    const dividerHeight = divider.getBoundingClientRect().height;
+    const minHeight = 200;
+    const maxHeight = bounds.height - 180 - dividerHeight - gap * 2;
+
+    if (maxHeight < minHeight) return;
+
+    const height = Math.max(minHeight, Math.min(maxHeight, event.clientY - bounds.top - gap - dividerHeight / 2));
+
+    sidebar.style.setProperty("--chat-height", `${height}px`);
+  }
+  
+  function stopResize(event: ReactPointerEvent<HTMLDivElement>) {
+    const divider  = event.currentTarget;
+
+    if (divider.hasPointerCapture(event.pointerId)) {
+      divider.releasePointerCapture(event.pointerId);
+    }
+  }
+
   function renderDay(day: Date) {
     const start = day.getTime();
     const items = byDay.get(start) ?? [];
@@ -369,7 +486,7 @@ export function Dashboard() {
         </div>
 
         {/* Desktop: each reminder is its own button. */}
-        <ul className="day-reminders">
+        <ScrollableReminders>
           {items.map((r) => (
             <li key={r.id}>
               <button
@@ -386,7 +503,7 @@ export function Dashboard() {
               </button>
             </li>
           ))}
-        </ul>
+        </ScrollableReminders>
 
         {/* Mobile: only the count, which opens the day. */}
         {items.length > 0 && (
@@ -675,6 +792,16 @@ export function Dashboard() {
             )}
           </section>
 
+          <div
+            className="schedule-divider"
+            onPointerDown={startResize}
+            onPointerMove={resize}
+            onPointerUp={stopResize}
+            onPointerCancel={stopResize}
+          >
+            <span className="schedule-divider-line" aria-hidden="true" />
+          </div>
+
           <div className="schedule-side">
             <section className="schedule-card schedule-chat" aria-labelledby="schedule-chat-title">
               <h2 id="schedule-chat-title" className="schedule-title">Reminder chat</h2>
@@ -726,6 +853,16 @@ export function Dashboard() {
                 </div>
               </form>
             </section>
+
+            <div
+              className="schedule-horizontal-divider"
+              onPointerDown={startVerticalResize}
+              onPointerMove={resizeChatHeight}
+              onPointerUp={stopResize}
+              onPointerCancel={stopResize}
+            >
+              <span className="schedule-horizontal-divider-line" aria-hidden="true" />
+            </div>
 
             <section className="schedule-card schedule-upcoming" aria-labelledby="schedule-upcoming-title">
               <h2 id="schedule-upcoming-title" className="schedule-title">Upcoming reminders</h2>
